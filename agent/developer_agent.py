@@ -5,7 +5,8 @@ from langchain.chains import LLMChain
 from langchain.prompts import StringPromptTemplate, BasePromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.schema import AgentAction, AgentFinish
-from langchin_core.prompt_value import PromptValue
+from langchain_core.prompt_values import StringPromptValue
+from langchain_core.prompt_values import PromptValue
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
 from tools.file_operations import FileOperations
@@ -88,7 +89,7 @@ class CustomPromptTemplate(BasePromptTemplate):
         return self.template.format(**kwargs)
     
     def format_prompt(self, **kwargs) -> PromptValue:
-        from langchain.schema import StringPromptValue
+        #from langchain.schema import StringPromptValue
         return StringPromptValue(text=self.format(**kwargs))
 
 class DeveloperAgent:
@@ -191,9 +192,8 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # Normalize escape sequences
-            content = content.replace("\\n", "\n").replace("\\t", "\t")
-
+            # Content is already properly decoded by JSON parser
+            # No additional processing needed
             return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -249,9 +249,8 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # Normalize escape sequences
-            content = content.replace("\\n", "\n").replace("\\t", "\t")
-
+            # Content is already properly decoded by JSON parser
+            # No additional processing needed
             return self.file_ops.append_to_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -348,31 +347,30 @@ CRITICAL RULES - READ CAREFULLY:
 - Only report success in Final Answer if you see "File written successfully" in an Observation
 
 JSON FORMAT FOR write_file AND append_to_file:
-For write_file or append_to_file, the Action Input MUST be valid JSON on a single line.
-Use \\n for newlines. For Python strings, use SINGLE quotes to avoid escaping issues.
+CRITICAL: The Action Input MUST be valid JSON on ONE line. The JSON parser will handle all escaping automatically.
+
+PYTHON CODE RULES:
+1. Use \\n for newlines in the JSON string
+2. Use SINGLE quotes ' for Python strings (NOT double quotes \")
+3. Use TRIPLE SINGLE quotes ''' for Python docstrings
+4. NEVER add backslashes before quotes in Python code
+5. Write Python code naturally, the JSON parser handles everything
 
 CORRECT EXAMPLES:
 Action: write_file
 Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hello, World!')\\n"}}
 
 Action: write_file
-Action Input: {{"file_path": "calc.py", "content": "def add(a, b):\\n    return a + b\\n"}}
-
-Action: write_file
 Action Input: {{"file_path": "doc.py", "content": "def func():\\n    '''This is a docstring'''\\n    return True\\n"}}
 
-Action: append_to_file
-Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
+Action: write_file
+Action Input: {{"file_path": "error.py", "content": "def check(x):\\n    if x < 0:\\n        raise ValueError(f'Value must be positive: {{x}}')\\n"}}
 
-KEY RULES FOR PYTHON CODE:
-- Use \\n for line breaks (NOT actual newlines)
-- For Python print/f-strings: Use SINGLE quotes like print('hello') or f'value: {{x}}'
-- For Python docstrings: Use TRIPLE SINGLE quotes like '''docstring''' (NOT \\\"\\\"\\\"docstring\\\"\\\"\\\")
-- For Python comments: Use # normally, no escaping needed
-- Keep JSON on ONE line
-- ALWAYS close the JSON string with "}}" at the end
-- DO NOT add backslashes before quotes that are already in Python code
-- COMPLETE FORMAT: {{"file_path": "file.py", "content": "code here"}}
+WRONG EXAMPLES (DO NOT DO THIS):
+❌ {{"file_path": "test.py", "content": "print(\\\\"hello\\\\")"}}  // WRONG: Do not escape Python quotes
+❌ {{"file_path": "doc.py", "content": "\\\\\\\"\\\\\\\"\\\\\\\"docstring\\\\\\\"\\\\\\\"\\\\\\\""}}  // WRONG: Do not escape docstrings
+✅ {{"file_path": "test.py", "content": "print('hello')"}}  // CORRECT: Use single quotes
+✅ {{"file_path": "doc.py", "content": "'''docstring'''"}}  // CORRECT: Use triple single quotes
 
 Begin!
 

@@ -235,6 +235,18 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
+            # Validate Python files - check if code looks reasonable
+            if file_path.endswith('.py'):
+                # Check if Python code has newlines (not all on one line)
+                if 'def ' in content or 'class ' in content:
+                    # Count lines - if it's Python code, it should have multiple lines
+                    line_count = content.count('\n')
+                    if line_count < 2 and len(content) > 50:
+                        return {
+                            "status": "error",
+                            "message": f"Python code appears to be on a single line. Use \\n to separate lines. Example: \"def hello():\\n    print('Hi')\\n\""
+                        }
+
             # Content is already properly decoded by JSON parser
             # No additional processing needed
             return self.file_ops.write_file(file_path, content)
@@ -389,53 +401,65 @@ CRITICAL RULES - READ CAREFULLY:
 - The Observation will confirm if the file was actually modified
 - Only report success in Final Answer if you see "File written successfully" in an Observation
 
-HOW TO WORK WITH PYTHON FILES:
+HOW TO WORK WITH PYTHON FILES - CRITICAL INSTRUCTIONS:
 
-CRITICAL WORKFLOW FOR UPDATING PYTHON FILES:
-1. ALWAYS read the file first with read_file to see current content
-2. Understand the existing code structure
-3. For modifications: Use write_file with the COMPLETE updated file content
-4. For adding new functions: Use append_to_file with ONLY the new code to add
+STEP-BY-STEP WORKFLOW:
+1. Read the file first: Action: read_file, Action Input: filename.py
+2. Decide: Am I MODIFYING existing code OR ADDING new code?
+3. Execute the appropriate action
 
-JSON FORMAT:
-- Action Input MUST be valid JSON on ONE line
-- The JSON parser handles all escaping automatically
-- Use \\n for newlines in the JSON string
-- Use SINGLE quotes ' for Python strings (NOT double quotes \")
-- Use TRIPLE SINGLE quotes ''' for Python docstrings
-- NEVER add backslashes before quotes in Python code
+RULE 1 - MODIFYING EXISTING CODE (changing a function, adding docstring to existing function):
+- Use: write_file
+- Content: COMPLETE file with ALL functions (existing + modified)
+- Format: Each line separated by \\n
 
-EXAMPLE 1 - Creating a new file:
+RULE 2 - ADDING NEW CODE (new function, new class):
+- Use: append_to_file  
+- Content: ONLY the new code to add
+- Format: Start with \\n\\n then the new code
+
+FORMATTING PYTHON CODE IN JSON:
+The JSON must be on ONE line. Use \\n to represent line breaks.
+
+Example of correct formatting:
+"def hello():\\n    print('Hi')\\n"
+
+This becomes in the file:
+def hello():
+    print('Hi')
+
+CORRECT EXAMPLE - Create new file:
 Action: write_file
-Action Input: {{"file_path": "hello.py", "content": "def hello():\\n    '''Say hello'''\\n    print('Hello, World!')\\n"}}
+Action Input: {{"file_path": "test.py", "content": "def hello():\\n    '''Greet user'''\\n    print('Hello')\\n"}}
 
-EXAMPLE 2 - Adding a function to existing file:
-Step 1: Read existing file
+CORRECT EXAMPLE - Add function to existing file:
 Action: read_file
-Action Input: hello.py
+Action Input: test.py
 Observation: def hello():\\n    print('Hello')\\n
 
-Step 2: Append new function (note the \\n\\n at start for spacing)
 Action: append_to_file
-Action Input: {{"file_path": "hello.py", "content": "\\n\\ndef goodbye():\\n    '''Say goodbye'''\\n    print('Goodbye!')\\n"}}
+Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    '''Say goodbye'''\\n    print('Bye')\\n"}}
 
-EXAMPLE 3 - Modifying existing function:
-Step 1: Read file
+CORRECT EXAMPLE - Modify existing function:
 Action: read_file
-Action Input: calc.py
-Observation: def add(a, b):\\n    return a + b\\n
+Action Input: test.py
+Observation: def hello():\\n    print('Hello')\\n
 
-Step 2: Write COMPLETE file with modification
 Action: write_file
-Action Input: {{"file_path": "calc.py", "content": "def add(a, b):\\n    '''Add two numbers'''\\n    return a + b\\n"}}
+Action Input: {{"file_path": "test.py", "content": "def hello():\\n    '''Say hello'''\\n    print('Hello')\\n"}}
 
-CRITICAL RULES:
-- When UPDATING existing code: Use write_file with COMPLETE file content
-- When ADDING new functions: Use append_to_file with ONLY new code (start with \\n\\n)
-- ALWAYS read file first before modifying
-- Use single quotes ' for Python strings
-- Use ''' for docstrings (NOT \\\"\\\"\\\")
-- Write valid Python code, not JSON objects
+CRITICAL - PYTHON CODE RULES:
+- Use \\n for each new line (NOT actual line breaks in JSON)
+- Use single quotes ' for Python strings: print('hello')
+- Use ''' for docstrings: '''This is a docstring'''
+- Indent with spaces: \\n    (4 spaces after \\n)
+- Each Python statement on its own line with \\n
+
+WRONG - DO NOT DO THIS:
+❌ Writing code as one line: "def hello(): print('Hi')"
+❌ Using double quotes: print(\\"hello\\")
+❌ Missing \\n between lines
+❌ Using append_to_file to modify existing code
 
 Begin!
 

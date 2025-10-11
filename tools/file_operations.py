@@ -7,20 +7,44 @@ class FileOperationInput(BaseModel):
     content: Optional[str] = Field(None, description="Content to write to the file")
 
 class FileOperations:
-    def __init__(self, root_dir: str = "."):
+    def __init__(self, root_dir: str = ".", max_file_size_mb: int = 5):
         self.root_dir = os.path.abspath(root_dir)
+        self.max_file_size = max_file_size_mb * 1024 * 1024  # Convert to bytes
 
     def _get_absolute_path(self, file_path: str) -> str:
         """Convert relative path to absolute path within the project root."""
         return os.path.join(self.root_dir, file_path)
 
     def read_file(self, file_path: str) -> Dict[str, Any]:
-        """Read content from a file."""
+        """Read content from a file with size limit."""
         abs_path = self._get_absolute_path(file_path)
         try:
-            with open(abs_path, 'r') as f:
-                content = f.read()
+            # Check file size
+            file_size = os.path.getsize(abs_path)
+            if file_size > self.max_file_size:
+                return {
+                    "status": "error",
+                    "message": f"File {file_path} is too large ({file_size / 1024 / 1024:.2f}MB). Maximum size is {self.max_file_size / 1024 / 1024}MB. Consider reading specific sections or using a different approach."
+                }
+            
+            # Try to read as text
+            try:
+                with open(abs_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except UnicodeDecodeError:
+                # If not text, return error
+                return {
+                    "status": "error",
+                    "message": f"File {file_path} appears to be binary. Cannot read binary files."
+                }
+            
+            # Truncate very long content for display
+            if len(content) > 50000:  # 50k characters
+                content = content[:50000] + "\n\n[... content truncated due to length ...]"
+            
             return {"status": "success", "content": content}
+        except FileNotFoundError:
+            return {"status": "error", "message": f"File {file_path} not found"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 

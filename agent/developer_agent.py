@@ -40,12 +40,29 @@ class VertexAIWrapper(VertexAI):
             else:
                 raise
         
-        # Handle list responses
+        # Handle list responses - convert to string immediately
         if isinstance(result, list):
-            result = ' '.join(str(item) for item in result)
+            if len(result) > 0:
+                # If list contains dicts or objects, extract text
+                if isinstance(result[0], dict) and 'text' in result[0]:
+                    result = ' '.join(str(item.get('text', item)) for item in result)
+                else:
+                    result = ' '.join(str(item) for item in result)
+            else:
+                result = ""
         
-        # Ensure string output
-        return str(result)
+        # Handle dict responses
+        if isinstance(result, dict):
+            if 'text' in result:
+                result = result['text']
+            else:
+                result = str(result)
+        
+        # Ensure string output - force conversion
+        if not isinstance(result, str):
+            result = str(result)
+        
+        return result
     
     def predict(self, text: str, stop: Optional[List[str]] = None) -> str:
         """Override predict to ensure string output."""
@@ -61,8 +78,23 @@ class VertexAIWrapper(VertexAI):
         for generation_list in result.generations:
             for generation in generation_list:
                 if hasattr(generation, 'text'):
-                    if not isinstance(generation.text, str):
-                        generation.text = str(generation.text)
+                    text_value = generation.text
+                    # Handle list
+                    if isinstance(text_value, list):
+                        if len(text_value) > 0:
+                            if isinstance(text_value[0], dict) and 'text' in text_value[0]:
+                                text_value = ' '.join(str(item.get('text', item)) for item in text_value)
+                            else:
+                                text_value = ' '.join(str(item) for item in text_value)
+                        else:
+                            text_value = ""
+                    # Handle dict
+                    elif isinstance(text_value, dict):
+                        text_value = text_value.get('text', str(text_value))
+                    # Ensure string
+                    if not isinstance(text_value, str):
+                        text_value = str(text_value)
+                    generation.text = text_value
         return result
 
 # Custom prompt template for the agent

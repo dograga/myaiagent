@@ -259,6 +259,25 @@ class DeveloperAgent:
                     return {"file_path": match.group(1), "content": content_match.group(1)}
         return None
 
+    def _fix_python_formatting(self, content: str) -> str:
+        """Auto-fix single-line Python code by adding proper newlines."""
+        # If content already has newlines, return as-is
+        if '\n' in content:
+            return content
+        
+        # Detect single-line Python code and fix it
+        # Pattern: def func(): statement or class Name: statement
+        if 'def ' in content or 'class ' in content:
+            # Add newline after colons followed by non-whitespace
+            import re
+            # Replace ': ' with ':\n    ' for function/class definitions
+            fixed = re.sub(r':\s+(?=\S)', ':\n    ', content)
+            # Ensure ends with newline
+            if not fixed.endswith('\n'):
+                fixed += '\n'
+            return fixed
+        
+        return content
     
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""

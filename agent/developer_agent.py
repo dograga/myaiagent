@@ -30,9 +30,6 @@ class VertexAIWrapper(VertexAI):
         """Call the VertexAI API and ensure string output."""
         try:
             result = super()._call(prompt, stop, run_manager, **kwargs)
-            if isinstance(result, list):
-                result = " ".join(map(str, result))
-            return str(result)
         except Exception as e:
             # If there's an error, try to extract the result
             if hasattr(e, 'args') and len(e.args) > 0:
@@ -54,13 +51,20 @@ class VertexAIWrapper(VertexAI):
             result = ' '.join(str(item) for item in result)
         return str(result)
 
-# Custom prompt template for the agent
 class CustomPromptTemplate(StringPromptTemplate):
+    def __init__(self, template: str, tools: List[Tool], input_variables: List[str]):
+        super().__init__(input_variables=input_variables)
+        self.template = template
+        self.tools = tools
+
     def format(self, **kwargs) -> str:
         # Convert history list to readable text if needed
         history = kwargs.get("history", "")
         if isinstance(history, list):
-            history = "\n".join([h.content if hasattr(h, "content") else str(h) for h in history])
+            history = "\n".join([
+                h.content if hasattr(h, "content") else str(h)
+                for h in history
+            ])
             kwargs["history"] = history
 
         intermediate_steps = kwargs.pop("intermediate_steps", [])
@@ -70,7 +74,7 @@ class CustomPromptTemplate(StringPromptTemplate):
         kwargs["agent_scratchpad"] = thoughts
 
         return self.template.format(**kwargs)
-        
+
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):
         # Initialize file operations

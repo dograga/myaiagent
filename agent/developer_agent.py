@@ -53,6 +53,17 @@ class VertexAIWrapper(VertexAI):
         if isinstance(result, list):
             result = ' '.join(str(item) for item in result)
         return str(result)
+    
+    def generate(self, prompts: List[str], stop: Optional[List[str]] = None, **kwargs) -> Any:
+        """Override generate to ensure string output in generations."""
+        result = super().generate(prompts, stop, **kwargs)
+        # Ensure all generation text outputs are strings
+        for generation_list in result.generations:
+            for generation in generation_list:
+                if hasattr(generation, 'text'):
+                    if not isinstance(generation.text, str):
+                        generation.text = str(generation.text)
+        return result
 
 # Custom prompt template for the agent
 class CustomPromptTemplate(BasePromptTemplate):

@@ -87,14 +87,8 @@ class CustomPromptTemplate(BasePromptTemplate):
         return self.template.format(**kwargs)
     
     def format_prompt(self, **kwargs) -> PromptValue:
-        class SimplePromptValue(PromptValue):
-            def __init__(self, text):
-                self.text = text
-            def to_string(self):
-                return self.text
-            def to_messages(self):
-                return [{"role": "user", "content": self.text}]
-        return SimplePromptValue(self.format(**kwargs))
+        from langchain.schema import StringPromptValue
+        return StringPromptValue(text=self.format(**kwargs))
 
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):
@@ -152,7 +146,7 @@ class DeveloperAgent:
         self.agent = self._create_agent()
 
     def _safe_parse_json(self, input_str: str) -> Optional[Dict[str, Any]]:
-    #"""Attempt to safely parse a possibly malformed JSON string from the LLM."""
+        """Attempt to safely parse a possibly malformed JSON string from the LLM."""
         try:
             return json.loads(input_str)
         except json.JSONDecodeError:
@@ -257,7 +251,7 @@ class DeveloperAgent:
             # Normalize escape sequences
             content = content.replace("\\n", "\n").replace("\\t", "\t")
 
-            return self.file_ops.write_file(file_path, content)
+            return self.file_ops.append_to_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
             try:

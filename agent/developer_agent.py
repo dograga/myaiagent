@@ -8,6 +8,7 @@ from langchain.schema import AgentAction, AgentFinish
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
 from tools.file_operations import FileOperations
+from langchain.schema import PromptValue
 import json
 import os
 import re

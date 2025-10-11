@@ -58,10 +58,7 @@ class DeveloperAgent:
             )
         
         try:
-            # Create a wrapper to handle list responses
-            from langchain.llms.base import BaseLLM
-            
-            base_llm = VertexAI(
+            self.llm = VertexAI(
                 model_name=model_name,
                 project=gcp_project,
                 location=gcp_location,
@@ -71,9 +68,6 @@ class DeveloperAgent:
                 top_k=40,
                 verbose=True
             )
-            
-            # Wrap the LLM to ensure string output
-            self.llm = self._create_llm_wrapper(base_llm)
         except Exception as e:
             error_msg = str(e)
             suggestions = []
@@ -100,30 +94,6 @@ class DeveloperAgent:
         
         # Set up the agent
         self.agent = self._create_agent()
-    
-    def _create_llm_wrapper(self, base_llm):
-        """Create a wrapper that ensures string output from the LLM."""
-        class LLMWrapper:
-            def __init__(self, llm):
-                self.llm = llm
-            
-            def __call__(self, prompt, stop=None):
-                result = self.llm(prompt, stop=stop)
-                # Handle list responses
-                if isinstance(result, list):
-                    result = ' '.join(str(item) for item in result)
-                return str(result)
-            
-            def predict(self, text, stop=None):
-                result = self.llm.predict(text, stop=stop)
-                if isinstance(result, list):
-                    result = ' '.join(str(item) for item in result)
-                return str(result)
-            
-            def __getattr__(self, name):
-                return getattr(self.llm, name)
-        
-        return LLMWrapper(base_llm)
     
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""
@@ -263,6 +233,13 @@ class DeveloperAgent:
 class CustomOutputParser(AgentOutputParser):
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         """Parse the output of the LLM."""
+        # Handle list responses from LLM
+        if isinstance(text, list):
+            text = ' '.join(str(item) for item in text)
+        
+        # Ensure text is a string
+        text = str(text)
+        
         # Check if this is a final answer
         if "Final Answer:" in text:
             return AgentFinish(

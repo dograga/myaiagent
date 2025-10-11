@@ -278,6 +278,10 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
+            # Auto-fix single-line Python code
+            if file_path.endswith('.py'):
+                content = self._fix_python_formatting(content)
+
             # Content is already properly decoded by JSON parser
             # JSON parser converts \n to actual newlines automatically
             return self.file_ops.write_file(file_path, content)
@@ -334,6 +338,10 @@ class DeveloperAgent:
 
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
+
+            # Auto-fix single-line Python code
+            if file_path.endswith('.py'):
+                content = self._fix_python_formatting(content)
 
             # Content is already properly decoded by JSON parser
             # No additional processing needed
@@ -583,7 +591,7 @@ Question: {input}
             verbose=True,
             memory=memory,
             max_iterations=10,  # Allow multiple steps
-            early_stopping_method="generate",  # Don't stop early
+            early_stopping_method="force",  # Use 'force' instead of 'generate'
             handle_parsing_errors=True  # Handle parsing errors gracefully
         )
     

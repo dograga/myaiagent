@@ -148,25 +148,36 @@ class DeveloperAgent:
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
             try:
-                # Look for file_path pattern
+                # Look for file_path pattern - more flexible
                 file_path_match = re.search(r'["\']file_path["\']\s*:\s*["\']([^"\'\\\\/]+)["\']', input_str)
-                # Look for content pattern - be more lenient
-                content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+)["\']\s*}\s*$', input_str, re.DOTALL)
                 
-                if file_path_match and content_match:
+                if file_path_match:
                     file_path = file_path_match.group(1)
-                    content = content_match.group(1)
-                    # Unescape common patterns
-                    content = content.replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
-                    content = content.replace("\\\"", '"').replace("\\'", "'")
-                    return self.file_ops.write_file(file_path, content)
-            except Exception:
-                pass
+                    
+                    # Try multiple patterns for content
+                    # Pattern 1: content with closing quote and brace
+                    content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+?)["\']\s*}', input_str, re.DOTALL)
+                    
+                    if not content_match:
+                        # Pattern 2: content to end of string (unterminated)
+                        content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+)', input_str, re.DOTALL)
+                    
+                    if content_match:
+                        content = content_match.group(1)
+                        # Remove trailing quote and brace if present
+                        content = content.rstrip('"}\' \n\r\t')
+                        # Unescape common patterns
+                        content = content.replace('\\n', '\n').replace('\\t', '\t')
+                        content = content.replace('\\\\', '\\').replace("\\\"", '"').replace("\\'", "'")
+                        return self.file_ops.write_file(file_path, content)
+            except Exception as fallback_error:
+                # Log fallback error for debugging
+                print(f"Fallback parser error: {fallback_error}")
             
             # Provide detailed error with example
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error writing file: {str(e)}"}
@@ -187,21 +198,28 @@ class DeveloperAgent:
             # Try to extract file_path and content manually as fallback
             try:
                 file_path_match = re.search(r'["\']file_path["\']\s*:\s*["\']([^"\'\\\\/]+)["\']', input_str)
-                content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+)["\']\s*}\s*$', input_str, re.DOTALL)
                 
-                if file_path_match and content_match:
+                if file_path_match:
                     file_path = file_path_match.group(1)
-                    content = content_match.group(1)
-                    # Unescape common patterns
-                    content = content.replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
-                    content = content.replace("\\\"", '"').replace("\\'", "'")
-                    return self.file_ops.append_to_file(file_path, content)
-            except Exception:
-                pass
+                    
+                    # Try multiple patterns for content
+                    content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+?)["\']\s*}', input_str, re.DOTALL)
+                    
+                    if not content_match:
+                        content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+)', input_str, re.DOTALL)
+                    
+                    if content_match:
+                        content = content_match.group(1)
+                        content = content.rstrip('"}\' \n\r\t')
+                        content = content.replace('\\n', '\n').replace('\\t', '\t')
+                        content = content.replace('\\\\', '\\').replace("\\\"", '"').replace("\\'", "'")
+                        return self.file_ops.append_to_file(file_path, content)
+            except Exception as fallback_error:
+                print(f"Fallback parser error: {fallback_error}")
             
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def goodbye():\\\\n    print('Bye')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def goodbye():\\\\n    print('Bye')\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error appending to file: {str(e)}"}
@@ -280,6 +298,22 @@ Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('He
 
 Action: write_file
 Action Input: {{"file_path": "calc.py", "content": "def add(a, b):\\n    return a + b\\n"}}
+Action: append_to_file
+Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
+
+KEY RULES:
+- Use \\n for line breaks (NOT actual newlines)
+- Use single quotes ' inside Python code (NOT double quotes ")
+- Keep JSON on ONE line
+- ALWAYS close the JSON string with "}}" at the end
+- Example: print('hello') NOT print(\\"hello\")
+- COMPLETE FORMAT: {{"file_path": "file.py", "content": "code here"}}
+
+Begin!
+
+Previous conversation history:
+{history}
+{{ ... }}
 
 Action: append_to_file
 Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
@@ -288,64 +322,15 @@ KEY RULES:
 - Use \\n for line breaks (NOT actual newlines)
 - Use single quotes ' inside Python code (NOT double quotes ")
 - Keep JSON on ONE line
-- Example: print('hello') NOT print(\\"hello\\")
+- ALWAYS close the JSON string with "}}" at the end
+- Example: print('hello') NOT print(\\"hello\")
+- COMPLETE FORMAT: {{"file_path": "file.py", "content": "code here"}}
 
 Begin!
 
 Previous conversation history:
 {history}
-
-Question: {input}
-{agent_scratchpad}"""
-        else:
-            template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
-
-IMPORTANT BEHAVIOR: You are in APPROVAL mode. When asked to make changes:
-1. First describe what changes you would make
-2. Wait for user approval before executing
-3. Only execute after explicit approval
-
-You have access to the following tools:
-{tools}
-
-You MUST use the following format exactly:
-
-Question: the input question you must answer
-Thought: think about what to do next
-Action: the action to take, must be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (repeat Thought/Action/Action Input/Observation as needed)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-CRITICAL: Always end with "Final Answer:" followed by your response.
-
-JSON FORMAT FOR write_file AND append_to_file:
-For write_file or append_to_file, the Action Input MUST be valid JSON on a single line.
-Use \\n for newlines. Use SINGLE quotes inside Python strings to avoid escaping.
-
-CORRECT EXAMPLES:
-Action: write_file
-Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hello, World!')\\n"}}
-
-Action: write_file
-Action Input: {{"file_path": "calc.py", "content": "def add(a, b):\\n    return a + b\\n"}}
-
-Action: append_to_file
-Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
-
-KEY RULES:
-- Use \\n for line breaks (NOT actual newlines)
-- Use single quotes ' inside Python code (NOT double quotes ")
-- Keep JSON on ONE line
-- Example: print('hello') NOT print(\\"hello\\")
-
-Begin!
-
-Previous conversation history:
-{history}
-
+{{ ... }}
 Question: {input}
 {agent_scratchpad}"""
         

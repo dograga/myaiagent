@@ -13,6 +13,9 @@ import json
 import os
 import re
 from dotenv import load_dotenv
+from typing import Any, List
+from langchain.prompts import BasePromptTemplate
+from pydantic import Field
 
 # Load environment variables
 load_dotenv()
@@ -55,13 +58,15 @@ class VertexAIWrapper(VertexAI):
 from langchain.prompts import BasePromptTemplate
 
 class CustomPromptTemplate(BasePromptTemplate):
+    template: str = Field(..., description="The main text template.")
+    tools: List[Any] = Field(default_factory=list, description="Tools available to the agent.")
+
     def __init__(self, template: str, tools: List[Any], input_variables: List[str]):
         super().__init__(input_variables=input_variables)
-        self.template = template
-        self.tools = tools
+        object.__setattr__(self, "template", template)
+        object.__setattr__(self, "tools", tools)
 
     def format(self, **kwargs) -> str:
-        # convert history list to readable text
         history = kwargs.get("history", "")
         if isinstance(history, list):
             history = "\n".join([

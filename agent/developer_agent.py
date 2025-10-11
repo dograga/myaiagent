@@ -73,28 +73,62 @@ class VertexAIWrapper(VertexAI):
     
     def generate(self, prompts: List[str], stop: Optional[List[str]] = None, **kwargs) -> Any:
         """Override generate to ensure string output in generations."""
-        result = super().generate(prompts, stop, **kwargs)
+        try:
+            result = super().generate(prompts, stop, **kwargs)
+        except Exception as e:
+            # If generation fails, create a simple error response
+            from langchain.schema import Generation, LLMResult
+            error_text = f"Error in generation: {str(e)}"
+            return LLMResult(generations=[[Generation(text=error_text)]])
+        
         # Ensure all generation text outputs are strings
         for generation_list in result.generations:
             for generation in generation_list:
                 if hasattr(generation, 'text'):
                     text_value = generation.text
-                    # Handle list
+                    
+                    # Handle list of dicts (like [{"thought": "...", "text": "..."}])
                     if isinstance(text_value, list):
                         if len(text_value) > 0:
-                            if isinstance(text_value[0], dict) and 'text' in text_value[0]:
-                                text_value = ' '.join(str(item.get('text', item)) for item in text_value)
+                            # If list contains dicts, try to extract meaningful content
+                            if isinstance(text_value[0], dict):
+                                # Look for common keys: 'text', 'content', 'output'
+                                extracted = []
+                                for item in text_value:
+                                    if 'text' in item:
+                                        extracted.append(str(item['text']))
+                                    elif 'content' in item:
+                                        extracted.append(str(item['content']))
+                                    elif 'output' in item:
+                                        extracted.append(str(item['output']))
+                                    else:
+                                        # Just convert the whole dict to string
+                                        extracted.append(str(item))
+                                text_value = ' '.join(extracted) if extracted else str(text_value[0])
                             else:
+                                # List of strings or other types
                                 text_value = ' '.join(str(item) for item in text_value)
                         else:
                             text_value = ""
+                    
                     # Handle dict
                     elif isinstance(text_value, dict):
-                        text_value = text_value.get('text', str(text_value))
-                    # Ensure string
+                        # Try common keys first
+                        if 'text' in text_value:
+                            text_value = str(text_value['text'])
+                        elif 'content' in text_value:
+                            text_value = str(text_value['content'])
+                        elif 'output' in text_value:
+                            text_value = str(text_value['output'])
+                        else:
+                            text_value = str(text_value)
+                    
+                    # Final safety: ensure string
                     if not isinstance(text_value, str):
                         text_value = str(text_value)
+                    
                     generation.text = text_value
+        
         return result
 
 # Custom prompt template for the agent
@@ -382,8 +416,10 @@ IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
 You have access to the following tools:
 {tools}
 
-You MUST use the following format exactly:
+OUTPUT FORMAT - CRITICAL:
+Your response MUST be plain text following this exact format. DO NOT output JSON objects or dictionaries.
 
+CORRECT FORMAT:
 Question: the input question you must answer
 Thought: I need to use [tool_name] to make this change
 Action: the action to take, must be one of [{tool_names}]
@@ -392,6 +428,11 @@ Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: I have completed the requested actions
 Final Answer: [Describe what you actually did and the results]
+
+WRONG - DO NOT DO THIS:
+❌ {{"thought": "I need to...", "action": "write_file"}}  // DO NOT output as JSON/dict
+✅ Thought: I need to...
+   Action: write_file  // Output as plain text
 
 CRITICAL RULES - READ CAREFULLY:
 - You CANNOT modify files by just thinking about it - you MUST use write_file or append_to_file tools

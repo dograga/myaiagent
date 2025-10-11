@@ -76,6 +76,16 @@ class CustomPromptTemplate(BasePromptTemplate):
         kwargs["agent_scratchpad"] = thoughts
 
         return self.template.format(**kwargs)
+    
+    def format_prompt(self, **kwargs) -> PromptValue:
+        class SimplePromptValue(PromptValue):
+            def __init__(self, text):
+                self.text = text
+            def to_string(self):
+                return self.text
+            def to_messages(self):
+                return [{"role": "user", "content": self.text}]
+        return SimplePromptValue(self.format(**kwargs))
 
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):

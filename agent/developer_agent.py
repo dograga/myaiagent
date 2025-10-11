@@ -218,11 +218,16 @@ class DeveloperAgent:
             memory=memory
         )
     
-    def run(self, query: str) -> str:
+    def run(self, query: str, return_details: bool = False) -> Union[str, Dict[str, Any]]:
         """Run the agent with the given query."""
         # Don't catch exceptions here - let them propagate to the API layer
-        result = self.agent.run(query)
-        return result
+        if return_details:
+            # Capture intermediate steps for detailed response
+            result = self.agent(query)
+            return result
+        else:
+            result = self.agent.run(query)
+            return result
 
 # Custom output parser
 class CustomOutputParser(AgentOutputParser):

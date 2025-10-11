@@ -26,7 +26,10 @@ project_root = os.getenv("PROJECT_ROOT", os.getcwd())
 if not os.path.isabs(project_root):
     project_root = os.path.abspath(project_root)
 
-agent = DeveloperAgent(project_root=project_root)
+# Get auto-approve setting from environment (default: True)
+auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
+
+agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):
@@ -74,7 +77,9 @@ async def health_check():
         "message": "Service is ready to accept queries",
         "config": {
             "project": os.getenv("GCP_PROJECT_ID"),
-            "location": os.getenv("GCP_LOCATION", "us-central1")
+            "location": os.getenv("GCP_LOCATION", "us-central1"),
+            "auto_approve": auto_approve,
+            "project_root": project_root
         }
     }
     

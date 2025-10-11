@@ -28,13 +28,27 @@ class VertexAIWrapper(VertexAI):
         **kwargs: Any,
     ) -> str:
         """Call the VertexAI API and ensure string output."""
-        result = super()._call(prompt, stop, run_manager, **kwargs)
+        try:
+            result = super()._call(prompt, stop, run_manager, **kwargs)
+        except Exception as e:
+            # If there's an error, try to extract the result
+            if hasattr(e, 'args') and len(e.args) > 0:
+                result = str(e.args[0])
+            else:
+                raise
         
         # Handle list responses
         if isinstance(result, list):
             result = ' '.join(str(item) for item in result)
         
         # Ensure string output
+        return str(result)
+    
+    def predict(self, text: str, stop: Optional[List[str]] = None) -> str:
+        """Override predict to ensure string output."""
+        result = super().predict(text, stop)
+        if isinstance(result, list):
+            result = ' '.join(str(item) for item in result)
         return str(result)
 
 # Custom prompt template for the agent
@@ -64,9 +78,10 @@ class CustomPromptTemplate(StringPromptTemplate):
         return self.template.format(**kwargs)
 
 class DeveloperAgent:
-    def __init__(self, project_root: str = "."):
+    def __init__(self, project_root: str = ".", auto_approve: bool = True):
         # Initialize file operations
         self.file_ops = FileOperations(project_root)
+        self.auto_approve = auto_approve
         
         # Initialize VertexAI with Application Default Credentials (ADC)
         # Ensure you've run: gcloud auth application-default login
@@ -177,32 +192,74 @@ class DeveloperAgent:
     
     def _create_agent(self) -> AgentExecutor:
         """Create and return the agent executor."""
-        # Define the prompt template
-        template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
-        
-        You have access to the following tools:
-        {tools}
-        
-        IMPORTANT: You MUST use the following format exactly:
-        
-        Question: the input question you must answer
-        Thought: think about what to do next
-        Action: the action to take, must be one of [{tool_names}]
-        Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
-        Observation: the result of the action
-        ... (repeat Thought/Action/Action Input/Observation as needed)
-        Thought: I now know the final answer
-        Final Answer: the final answer to the original input question
-        
-        CRITICAL: Always end with "Final Answer:" followed by your response. Never give a direct response without this format.
-        
-        Begin!
-        
-        Previous conversation history:
-        {history}
-        
-        Question: {input}
-        {agent_scratchpad}"""
+        # Define the prompt template based on approval mode
+        if self.auto_approve:
+            template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
+
+IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
+1. IMMEDIATELY execute the changes using the appropriate tools
+2. DO NOT just describe what you would do
+3. DO NOT ask for permission or approval
+4. Take action first, then report what you did
+
+You have access to the following tools:
+{tools}
+
+You MUST use the following format exactly:
+
+Question: the input question you must answer
+Thought: I will now execute this action
+Action: the action to take, must be one of [{tool_names}]
+Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
+Observation: the result of the action
+... (repeat Thought/Action/Action Input/Observation as needed)
+Thought: I have completed the requested actions
+Final Answer: [Describe what you actually did and the results]
+
+CRITICAL RULES:
+- ALWAYS execute actions immediately, don't just describe them
+- Use tools to make changes, don't just explain what changes to make
+- When user says "go ahead" or "do it", they are confirming you should have already done it
+- Report what you DID, not what you WILL do
+
+Begin!
+
+Previous conversation history:
+{history}
+
+Question: {input}
+{agent_scratchpad}"""
+        else:
+            template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
+
+IMPORTANT BEHAVIOR: You are in APPROVAL mode. When asked to make changes:
+1. First describe what changes you would make
+2. Wait for user approval before executing
+3. Only execute after explicit approval
+
+You have access to the following tools:
+{tools}
+
+You MUST use the following format exactly:
+
+Question: the input question you must answer
+Thought: think about what to do next
+Action: the action to take, must be one of [{tool_names}]
+Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
+Observation: the result of the action
+... (repeat Thought/Action/Action Input/Observation as needed)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+CRITICAL: Always end with "Final Answer:" followed by your response.
+
+Begin!
+
+Previous conversation history:
+{history}
+
+Question: {input}
+{agent_scratchpad}"""
         
         # Create the prompt
         prompt = CustomPromptTemplate(

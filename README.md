@@ -10,6 +10,7 @@ A LangChain-based developer assistant that helps with code-related tasks using n
 - **Session-based chat** with conversation history
 - **Detailed thought process** - See how the agent reasons and makes decisions
 - **Context-aware interactions** - Agent remembers previous messages in a session
+- **Auto-approve mode** - Agent executes changes immediately (default) or waits for approval
 - **FastAPI-based REST API** with comprehensive endpoints
 - **Automatic session cleanup** - Sessions expire after 60 minutes of inactivity
 

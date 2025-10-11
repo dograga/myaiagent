@@ -4,7 +4,8 @@ from langchain.agents.agent import AgentOutputParser
 from langchain.chains import LLMChain
 from langchain.prompts import StringPromptTemplate, BasePromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
-from langchain.schema import AgentAction, AgentFinish, PromptValue
+from langchain.schema import AgentAction, AgentFinish
+from langchin_core.prompt_value import PromptValue
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
 from tools.file_operations import FileOperations
@@ -348,7 +349,7 @@ CRITICAL RULES - READ CAREFULLY:
 
 JSON FORMAT FOR write_file AND append_to_file:
 For write_file or append_to_file, the Action Input MUST be valid JSON on a single line.
-Use \\n for newlines. Use SINGLE quotes inside Python strings to avoid escaping.
+Use \\n for newlines. For Python strings, use SINGLE quotes to avoid escaping issues.
 
 CORRECT EXAMPLES:
 Action: write_file
@@ -356,39 +357,28 @@ Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('He
 
 Action: write_file
 Action Input: {{"file_path": "calc.py", "content": "def add(a, b):\\n    return a + b\\n"}}
+
+Action: write_file
+Action Input: {{"file_path": "doc.py", "content": "def func():\\n    '''This is a docstring'''\\n    return True\\n"}}
+
 Action: append_to_file
 Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
 
-KEY RULES:
+KEY RULES FOR PYTHON CODE:
 - Use \\n for line breaks (NOT actual newlines)
-- Use single quotes ' inside Python code (NOT double quotes ")
+- For Python print/f-strings: Use SINGLE quotes like print('hello') or f'value: {{x}}'
+- For Python docstrings: Use TRIPLE SINGLE quotes like '''docstring''' (NOT \\\"\\\"\\\"docstring\\\"\\\"\\\")
+- For Python comments: Use # normally, no escaping needed
 - Keep JSON on ONE line
 - ALWAYS close the JSON string with "}}" at the end
-- Example: print('hello') NOT print(\\"hello\")
+- DO NOT add backslashes before quotes that are already in Python code
 - COMPLETE FORMAT: {{"file_path": "file.py", "content": "code here"}}
 
 Begin!
 
 Previous conversation history:
 {history}
-{{ ... }}
 
-Action: append_to_file
-Action Input: {{"file_path": "test.py", "content": "\\ndef goodbye():\\n    print('Goodbye!')\\n"}}
-
-KEY RULES:
-- Use \\n for line breaks (NOT actual newlines)
-- Use single quotes ' inside Python code (NOT double quotes ")
-- Keep JSON on ONE line
-- ALWAYS close the JSON string with "}}" at the end
-- Example: print('hello') NOT print(\\"hello\")
-- COMPLETE FORMAT: {{"file_path": "file.py", "content": "code here"}}
-
-Begin!
-
-Previous conversation history:
-{history}
-{{ ... }}
 Question: {input}
 {agent_scratchpad}"""
         

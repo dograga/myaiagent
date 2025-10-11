@@ -95,6 +95,34 @@ class DeveloperAgent:
         # Set up the agent
         self.agent = self._create_agent()
     
+    def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
+        """Wrapper for write_file that parses JSON input."""
+        try:
+            data = json.loads(input_str)
+            file_path = data.get('file_path')
+            content = data.get('content')
+            if not file_path or content is None:
+                return {"status": "error", "message": "Both 'file_path' and 'content' are required"}
+            return self.file_ops.write_file(file_path, content)
+        except json.JSONDecodeError:
+            return {"status": "error", "message": "Invalid JSON input. Expected format: {\"file_path\": \"path\", \"content\": \"text\"}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    
+    def _append_to_file_wrapper(self, input_str: str) -> Dict[str, str]:
+        """Wrapper for append_to_file that parses JSON input."""
+        try:
+            data = json.loads(input_str)
+            file_path = data.get('file_path')
+            content = data.get('content')
+            if not file_path or content is None:
+                return {"status": "error", "message": "Both 'file_path' and 'content' are required"}
+            return self.file_ops.append_to_file(file_path, content)
+        except json.JSONDecodeError:
+            return {"status": "error", "message": "Invalid JSON input. Expected format: {\"file_path\": \"path\", \"content\": \"text\"}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+    
     def _setup_tools(self) -> List[Tool]:
         """Set up the tools for the agent."""
         return [
@@ -105,13 +133,13 @@ class DeveloperAgent:
             ),
             Tool(
                 name="write_file",
-                func=self.file_ops.write_file,
-                description="Useful for writing content to a file. Input should be a JSON string with 'file_path' and 'content' keys."
+                func=self._write_file_wrapper,
+                description='Useful for writing content to a file. Input must be a JSON string with format: {"file_path": "path/to/file", "content": "text to write"}'
             ),
             Tool(
                 name="append_to_file",
-                func=self.file_ops.append_to_file,
-                description="Useful for appending content to a file. Input should be a JSON string with 'file_path' and 'content' keys."
+                func=self._append_to_file_wrapper,
+                description='Useful for appending content to a file. Input must be a JSON string with format: {"file_path": "path/to/file", "content": "text to append"}'
             ),
             Tool(
                 name="delete_file",
@@ -121,7 +149,7 @@ class DeveloperAgent:
             Tool(
                 name="list_directory",
                 func=self.file_ops.list_directory,
-                description="Useful for listing the contents of a directory. Input should be the directory path relative to the project root."
+                description="Useful for listing the contents of a directory. Input should be the directory path relative to the project root (default is '.')."
             )
         ]
     

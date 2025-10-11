@@ -51,14 +51,16 @@ class VertexAIWrapper(VertexAI):
             result = ' '.join(str(item) for item in result)
         return str(result)
 
-class CustomPromptTemplate(StringPromptTemplate):
-    def __init__(self, template: str, tools: List[Tool], input_variables: List[str]):
+from langchain.prompts import BasePromptTemplate
+
+class CustomPromptTemplate(BasePromptTemplate):
+    def __init__(self, template: str, tools: List[Any], input_variables: List[str]):
         super().__init__(input_variables=input_variables)
         self.template = template
         self.tools = tools
 
     def format(self, **kwargs) -> str:
-        # Convert history list to readable text if needed
+        # convert history list to readable text
         history = kwargs.get("history", "")
         if isinstance(history, list):
             history = "\n".join([

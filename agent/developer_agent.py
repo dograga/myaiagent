@@ -405,16 +405,36 @@ class DeveloperAgent:
             template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
 
 ⚠️ CRITICAL - READ THIS FIRST ⚠️
-When writing Python code in JSON, you MUST use \\n for line breaks.
+When writing Python code in JSON, you MUST use \\n (backslash-n) for line breaks.
 
-EXAMPLE - This is how you write Python code:
+EXAMPLE - This is EXACTLY what you must type:
 Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
+                                                                    ↑↑        ↑↑
+                                                            These are: backslash + n
 
-This creates a file with:
+This creates a file with MULTIPLE LINES:
 def hello():
     print('Hi')
 
-NOT: {{"content": "def hello(): print('Hi')"}}  ← WRONG (single line)
+WRONG EXAMPLES - DO NOT DO THIS:
+❌ {{"content": "def hello(): print('Hi')"}}  ← Missing \\n (creates single line)
+❌ {{"content": "def hello():\\\\n    print('Hi')"}}  ← Double backslash (wrong)
+✅ {{"content": "def hello():\\n    print('Hi')\\n"}}  ← Correct (single backslash + n)
+
+APPEND EXAMPLE - When adding a function to existing file:
+Existing file has: def hello():\\n    print('Hello')\\n
+
+To add goodbye function, use append_to_file with:
+Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
+                                                      ↑↑↑↑
+                                            Start with TWO \\n for blank line
+
+Result: File will have BOTH functions on SEPARATE LINES:
+def hello():
+    print('Hello')
+
+def goodbye():
+    print('Bye')
 
 IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
 1. IMMEDIATELY execute the changes using the appropriate tools

@@ -146,7 +146,6 @@ class CustomPromptTemplate(BasePromptTemplate):
     tools: List[Any] = Field(default_factory=list, description="Tools available to the agent.")
 
     def __init__(self, *, template: str, tools: List[Any], input_variables: List[str]):
-        # Pass all fields directly to BasePromptTemplate (Pydantic model)
         super().__init__(template=template, tools=tools, input_variables=input_variables)
 
     def format(self, **kwargs) -> str:
@@ -175,17 +174,13 @@ class CustomPromptTemplate(BasePromptTemplate):
         return self.template.format(**kwargs)
     
     def format_prompt(self, **kwargs) -> PromptValue:
-        #from langchain.schema import StringPromptValue
         return StringPromptValue(text=self.format(**kwargs))
 
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):
-        # Initialize file operations
         self.file_ops = FileOperations(project_root)
         self.auto_approve = auto_approve
         
-        # Initialize VertexAI with Application Default Credentials (ADC)
-        # Ensure you've run: gcloud auth application-default login
         gcp_project = os.getenv("GCP_PROJECT_ID")
         gcp_location = os.getenv("GCP_LOCATION", "us-central1")
         model_name = os.getenv("VERTEX_MODEL_NAME", "text-bison@002")
@@ -200,8 +195,8 @@ class DeveloperAgent:
                 model_name=model_name,
                 project=gcp_project,
                 location=gcp_location,
-                max_output_tokens=2048,  # Increased for complex projects
-                temperature=0,  # Set to 0 for deterministic output
+                max_output_tokens=2048,
+                temperature=0,
                 top_p=0.95,
                 top_k=40,
                 verbose=True
@@ -212,25 +207,15 @@ class DeveloperAgent:
             
             if "404" in error_msg:
                 suggestions.append(f"The model '{model_name}' might not be available in region '{gcp_location}'")
-                suggestions.append(f"Try enabling the API: gcloud services enable aiplatform.googleapis.com --project={gcp_project}")
-                suggestions.append(f"List available models: gcloud ai models list --region={gcp_location}")
-                suggestions.append("Try a different model by setting VERTEX_MODEL_NAME in .env (e.g., text-bison@002, gemini-pro)")
             elif "403" in error_msg:
                 suggestions.append("Permission denied - check your GCP project permissions")
-                suggestions.append(f"Enable Vertex AI API: gcloud services enable aiplatform.googleapis.com --project={gcp_project}")
-            else:
-                suggestions.append("Make sure you've authenticated with: gcloud auth application-default login")
             
             suggestion_text = "\n  - ".join(suggestions)
             raise RuntimeError(
                 f"Failed to initialize VertexAI: {error_msg}\n\nSuggestions:\n  - {suggestion_text}"
             )
             
-        
-        # Define tools
         self.tools = self._setup_tools()
-        
-        # Set up the agent
         self.agent = self._create_agent()
 
     def _safe_parse_json(self, input_str: str) -> Optional[Dict[str, Any]]:
@@ -238,50 +223,26 @@ class DeveloperAgent:
         try:
             return json.loads(input_str)
         except json.JSONDecodeError:
-            # Try repairing common issues
             cleaned = input_str.strip()
-
-            # Replace real newlines inside strings with escaped ones
-            # This is complex and often dangerous, better to rely on regex fallbacks
-            # cleaned = cleaned.replace("\n", "\\n")
-
-            # Sometimes model omits closing braces
             if not cleaned.endswith("}"):
                 cleaned += "}"
-
-            # Try again
             try:
                 return json.loads(cleaned)
             except json.JSONDecodeError:
-                # Last resort: extraction handled by the wrapper's fallback
                 return None
 
-    # NOTE: _fix_python_formatting is largely redundant due to prompt/JSON handling.
-    # Leaving it here but removing calls in wrappers for stability.
+    # NOTE: _fix_python_formatting is no longer called in wrappers for stability.
     def _fix_python_formatting(self, content: str) -> str:
         """Auto-fix single-line Python code by adding proper newlines."""
-        # First, check if content has LITERAL \n strings (not actual newlines)
-        # This happens when LLM outputs backslash-n as two characters instead of escape sequence
         if '\\n' in content and '\n' not in content:
-            # Convert literal \n to actual newlines
-            content = content.replace('\\n', '\n')
-            # Also handle other escape sequences
-            content = content.replace('\\t', '\t')
+            content = content.replace('\\n', '\n').replace('\\t', '\t')
             return content
         
-        # If content already has actual newlines, check if it's properly formatted
         if '\n' in content:
-            # Count lines - if it has newlines, assume it's formatted
             return content
         
-        # Detect single-line Python code and fix it
-        # Pattern: def func(): statement or class Name: statement
         if 'def ' in content or 'class ' in content or 'import ' in content:
-            # Add newline after colons followed by non-whitespace
-            import re
-            # Replace ': ' with ':\n    ' for function/class definitions
             fixed = re.sub(r':\s+(?=\S)', ':\n    ', content)
-            # Ensure ends with newline
             if not fixed.endswith('\n'):
                 fixed += '\n'
             return fixed
@@ -290,14 +251,12 @@ class DeveloperAgent:
     
     def _read_file_wrapper(self, file_path: str) -> Dict[str, Any]:
         """Wrapper for read_file that accepts a simple file path string."""
-        # Clean up the input - remove any quotes or whitespace
         file_path = file_path.strip().strip('"').strip("'")
         return self.file_ops.read_file(file_path)
     
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""
         try:
-            # Try to parse as JSON first
             data = self._safe_parse_json(input_str)
             if not data:
                 return {
@@ -312,45 +271,33 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # FIX: REMOVED CALL TO _fix_python_formatting.
-            # Content is already properly decoded by JSON parser (\\n -> \n)
+            # Content is expected to be properly unescaped by json.loads
             
             return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
-            # Try to extract file_path and content manually as fallback
+            # Fallback parsing for malformed JSON
             try:
-                # Look for file_path pattern - more flexible
                 file_path_match = re.search(r'["\']file_path["\']\s*:\s*["\']([^"\'\\\\/]+)["\']', input_str)
                 
                 if file_path_match:
                     file_path = file_path_match.group(1)
-                    
-                    # Try multiple patterns for content
-                    # Pattern 1: content with closing quote and brace
                     content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+?)["\']\s*}', input_str, re.DOTALL)
-                    
                     if not content_match:
-                        # Pattern 2: content to end of string (unterminated)
                         content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+)', input_str, re.DOTALL)
                     
                     if content_match:
                         content = content_match.group(1)
-                        # Remove trailing quote and brace if present
                         content = content.rstrip('"}\' \n\r\t')
-                        
-                        # FIX: UNESCAPE common patterns robustly
                         content = content.replace('\\n', '\n').replace('\\t', '\t')
                         content = content.replace('\\\\', '\\').replace('\\"', '"').replace('\\\'', "'")
                         
                         return self.file_ops.write_file(file_path, content)
-            except Exception as fallback_error:
-                # Log fallback error for debugging
-                print(f"Fallback parser error in write: {fallback_error}")
+            except Exception:
+                pass
             
-            # Provide detailed error with example
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error writing file: {str(e)}"}
@@ -363,7 +310,7 @@ class DeveloperAgent:
                 return {
                     "status": "error",
                     "message": f"Invalid JSON format. Could not parse input. "
-                                f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
+                                f"Example: {{\"file_path\": \"example.py\", \"content\": \"\\n\\ndef new_func():\"}}"
                 }
 
             file_path = data.get("file_path")
@@ -371,20 +318,17 @@ class DeveloperAgent:
 
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
-
-            # FIX: REMOVED CALL TO _fix_python_formatting.
-            # Content is already properly decoded by JSON parser (\\n -> \n)
             
+            # Content is expected to be properly unescaped by json.loads
+
             return self.file_ops.append_to_file(file_path, content)
         except json.JSONDecodeError as e:
-            # Try to extract file_path and content manually as fallback
+            # Fallback parsing
             try:
                 file_path_match = re.search(r'["\']file_path["\']\s*:\s*["\']([^"\'\\\\/]+)["\']', input_str)
                 
                 if file_path_match:
                     file_path = file_path_match.group(1)
-                    
-                    # Try multiple patterns for content
                     content_match = re.search(r'["\']content["\']\s*:\s*["\'](.+?)["\']\s*}', input_str, re.DOTALL)
                     
                     if not content_match:
@@ -393,22 +337,55 @@ class DeveloperAgent:
                     if content_match:
                         content = content_match.group(1)
                         content = content.rstrip('"}\' \n\r\t')
-                        
-                        # FIX: UNESCAPE common patterns robustly
                         content = content.replace('\\n', '\n').replace('\\t', '\t')
                         content = content.replace('\\\\', '\\').replace('\\"', '"').replace('\\\'', "'")
                         
                         return self.file_ops.append_to_file(file_path, content)
-            except Exception as fallback_error:
-                print(f"Fallback parser error in append: {fallback_error}")
+            except Exception:
+                pass
             
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def goodbye():\\\\n    print('Bye')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"\\n\\ndef new_func():\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error appending to file: {str(e)}"}
-    
+
+    def _modify_code_block_wrapper(self, input_str: str) -> Dict[str, str]:
+        """
+        FIX: Wrapper for the new tool that performs a surgical find-and-replace, 
+        making the agent's input much simpler and less error-prone.
+        """
+        try:
+            # Note: Using json.loads ensures file_path, search_block, and replace_block are unescaped
+            data = json.loads(input_str) 
+        except json.JSONDecodeError as e:
+            return {"status": "error", "message": f"Invalid JSON for modify_code_block. Error: {str(e)}. Input: {input_str}"}
+
+        file_path = data.get("file_path")
+        search_block = data.get("search_block")
+        replace_block = data.get("replace_block")
+
+        if not all([file_path, search_block is not None, replace_block is not None]):
+            return {"status": "error", "message": "Missing file_path, search_block, or replace_block."}
+
+        # 1. Read the file
+        read_result = self.file_ops.read_file(file_path)
+        if read_result['status'] == 'error':
+            return read_result
+
+        original_content = read_result['content']
+        
+        # 2. Perform the replace operation (replace once for safety)
+        if search_block not in original_content:
+            return {"status": "error", "message": f"Search block not found in {file_path}. The agent must use 'read_file' to get the exact existing code before using this tool."}
+            
+        new_content = original_content.replace(search_block, replace_block, 1)
+        
+        # 3. Write the new content (using existing write_file logic)
+        return self.file_ops.write_file(file_path, new_content)
+
+
     def _setup_tools(self) -> List[Tool]:
         """Set up the tools for the agent."""
         return [
@@ -420,12 +397,17 @@ class DeveloperAgent:
             Tool(
                 name="write_file",
                 func=self._write_file_wrapper,
-                description='Creates a new file or REPLACES entire file content. Use for: (1) Creating new files, (2) Modifying existing code (e.g., changing a function, adding an import). When modifying, you MUST provide the COMPLETE file content with your changes, including ALL existing, UNCHANGED code. Input: {"file_path": "path/to/file", "content": "complete file content"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
+                description='Creates a new file. Use ONLY for NEW files. Input: {"file_path": "path/to/file", "content": "complete file content"}. When creating new Python files, use \\n for newlines and 4 spaces for indentation. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
+            ),
+            Tool(
+                name="modify_code_block",
+                func=self._modify_code_block_wrapper,
+                description='**CRITICAL for existing files:** Surgically modifies a specific block of code in an existing file. Use this for changing existing functions/imports/classes. Input: {"file_path": "path/to/file", "search_block": "existing code to find", "replace_block": "new code block"}. The content for search/replace can be **multi-line** and **DOES NOT REQUIRE \\n ESCAPING**.'
             ),
             Tool(
                 name="append_to_file",
                 func=self._append_to_file_wrapper,
-                description='Adds content to the END of an existing file. Use ONLY for adding NEW functions/classes/code blocks to the end of a file. Do NOT use for modifying existing code. Always start content with \\n\\n for proper spacing between the new and existing code. Input: {"file_path": "path/to/file", "content": "new code to add"}. Example: {"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print(\'Bye\')"}'
+                description='Adds NEW content (new functions/classes) to the END of an existing file. Do NOT use for modifying existing code. Always start content with \\n\\n for proper spacing. Input: {"file_path": "path/to/file", "content": "\\n\\ndef new_func():\\n    pass\\n"}'
             ),
             Tool(
                 name="delete_file",
@@ -441,40 +423,37 @@ class DeveloperAgent:
     
     def _create_agent(self) -> AgentExecutor:
         """Create and return the agent executor."""
-        # Define the prompt template based on approval mode
-        if self.auto_approve:
-            template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
+        
+        template = """You are a helpful AI developer assistant that helps with code-related tasks.
 
 ⚠️ CRITICAL - READ THIS FIRST ⚠️
-When writing Python code in JSON, you **MUST** use \\n (backslash-n) for line breaks.
 
-EXAMPLE - This is **EXACTLY** what you must type for multi-line content:
-Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
-                                                                    ↑↑        ↑↑
-                                                            These are: **single** backslash + n
+**New Rules for Code Modification:**
+1.  **To CREATE a new file:** Use **write_file**. You must use **\\n** for newlines in the JSON `content`.
+2.  **To MODIFY existing code:** Use **modify_code_block**. You **DO NOT** use **\\n** for newlines in the `search_block` or `replace_block`. These blocks should look exactly like the code they represent (multi-line, unescaped).
+3.  **To ADD NEW code at the end of a file:** Use **append_to_file**. You must use **\\n** for newlines in the JSON `content`.
 
-This creates a file with MULTIPLE LINES:
-def hello():
-    print('Hi')
+**Example: Using modify_code_block (No \\n needed in search/replace blocks!)**
+Action: read_file
+Action Input: test.py
+Observation: def existing_func():
+    print('A')
+    return True
 
-APPEND EXAMPLE - When adding a function to existing file:
-Existing file has: def hello():\\n    print('Hello')\\n
-
-To add goodbye function, use **append_to_file** with:
-Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
-                                                      **↑↑↑↑**
-                                            Start with **TWO \\n** for a blank line separator.
-
-IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
-1. **IMMEDIATELY** execute the changes using the appropriate tools
-2. **DO NOT** just describe what you would do
-3. Take action first, then report what you did
+Thought: I need to change the return value of existing_func.
+Action: modify_code_block
+Action Input: {{"file_path": "test.py", "search_block": "def existing_func():
+    print('A')
+    return True", "replace_block": "def existing_func():
+    print('A')
+    return False"}}
+// Note: The blocks above are multi-line and DO NOT use \\n or extra escaping.
 
 You have access to the following tools:
 {tools}
 
 OUTPUT FORMAT - CRITICAL:
-Your response **MUST** be plain text following this exact format. **DO NOT** output JSON objects or dictionaries.
+Your response MUST be plain text following this exact format. DO NOT output JSON objects or dictionaries.
 
 CORRECT FORMAT:
 Thought: I need to use [tool_name] to make this change
@@ -485,41 +464,9 @@ Observation: the result of the action
 Thought: I have completed the requested actions
 Final Answer: [Describe what you actually did and the results]
 
-CRITICAL RULES - READ CAREFULLY:
-- You CANNOT modify files by just thinking about it - you MUST use **write_file** or **append_to_file** tools
-- NEVER say "I have modified the file" without an Action/Observation showing the tool was used
-- After reading a file, the next step is **ALWAYS** an Action (write_file/append_to_file), not Final Answer
-- Only report success in Final Answer if you see "File written successfully" or "File content appended successfully" in an Observation
-
-HOW TO WORK WITH PYTHON FILES - CRITICAL INSTRUCTIONS:
-
-TOOL INPUT FORMATS - IMPORTANT:
-- read_file: Simple string (just the file path)
-  Example: Action Input: test.py
-- write_file: JSON object with file_path and content
-  Example: Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
-- append_to_file: JSON object with file_path and content
-  Example: Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
-
-⚠️ **CRITICAL - PREVENTING FUNCTION DELETION (The Golden Rule for write_file):**
-When you use `write_file` to modify an existing file (e.g., change an import, edit a function, or add a docstring):
-1.  **STEP 1: Read the file** to get ALL existing content.
-2.  **STEP 2: Use write_file** with a `content` string that **INCLUDES ALL CODE** (the existing, unmodified code **plus** your changes).
-3.  **If you omit any existing functions or classes, they will be permanently DELETED.**
-
-Example Workflow to Modify `existing_func`:
-1.  **Action: read_file**
-    **Action Input: test.py**
-    **Observation: def existing_func():\\n    return 'Old'\\n**
-2.  **Thought: I need to rewrite the ENTIRE file with the change.**
-    **Action: write_file**
-    **Action Input: {{"file_path": "test.py", "content": "def existing_func():\\n    return 'New'\\n"}}**
-
-FORMATTING PYTHON CODE - CRITICAL:
-- Every line of Python code must end with **\\n**
-- Indentation: use **\\n** followed by spaces (**\\n    ** for 4 spaces)
-- Use **single quotes ' not double quotes "** for Python strings.
-- Use **'''** for docstrings, not **\\\"\\\"\\\"**
+CRITICAL RULES:
+- **Always** use `read_file` first to get the exact content before using `modify_code_block`. The `search_block` must match the existing code exactly.
+- **NEVER** use `write_file` to modify an existing file. Use `modify_code_block` or `append_to_file`.
 
 Begin!
 
@@ -563,16 +510,14 @@ Question: {input}
             tools=self.tools,
             verbose=True,
             memory=memory,
-            max_iterations=10,  # Allow multiple steps
-            early_stopping_method="force",  # Use 'force' instead of 'generate'
-            handle_parsing_errors=True  # Handle parsing errors gracefully
+            max_iterations=10,
+            early_stopping_method="force",
+            handle_parsing_errors=True
         )
     
     def run(self, query: str, return_details: bool = False) -> Union[str, Dict[str, Any]]:
         """Run the agent with the given query."""
-        # Don't catch exceptions here - let them propagate to the API layer
         if return_details:
-            # Capture intermediate steps for detailed response
             result = self.agent(query)
             return result
         else:
@@ -583,49 +528,37 @@ Question: {input}
 class CustomOutputParser(AgentOutputParser):
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         """Parse the output of the LLM."""
-        # Handle list responses from LLM
         if isinstance(text, list):
             text = ' '.join(str(item) for item in text)
         
-        # Ensure text is a string
         text = str(text)
         
-        # Check if this is a final answer
         if "Final Answer:" in text:
             return AgentFinish(
                 return_values={"output": text.split("Final Answer:")[-1].strip()},
                 log=text
             )
         
-        # Check if this contains Action and Action Input
         if "Action:" in text and "Action Input:" in text:
             try:
-                # Extract the action part after the last "Action:" marker
                 action_block = text.split("Action:")[-1]
                 
-                # Split by "Action Input:" to get action and input
                 if "Action Input:" in action_block:
                     parts = action_block.split("Action Input:", 1)
                     action = parts[0].strip()
                     action_input = parts[1].strip()
                     
-                    # Clean up the action input (remove quotes, newlines before observation)
                     if "\nObservation:" in action_input:
                         action_input = action_input.split("\nObservation:")[0].strip()
-                    # Keep all quotes/braces for robust JSON passing
-                    # action_input = action_input.strip('"').strip("'").strip() # <-- Removed this strip
                     
                     return AgentAction(
                         tool=action,
                         tool_input=action_input,
                         log=text
                     )
-            except Exception as e:
-                # If parsing fails, treat as final answer
+            except Exception:
                 pass
         
-        # If we can't parse it as an action, treat it as a final answer
-        # This handles cases where the LLM gives a direct response
         return AgentFinish(
             return_values={"output": text.strip()},
             log=text

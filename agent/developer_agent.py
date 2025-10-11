@@ -524,10 +524,29 @@ TOOL INPUT FORMATS - IMPORTANT:
 - append_to_file: JSON object with file_path and content
   Example: Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
 
+⚠️ CRITICAL - WHEN MODIFYING EXISTING FILES:
+When you read a file and need to modify it, you MUST:
+1. Include ALL existing code (don't remove any functions/classes)
+2. Use SINGLE quotes ' for Python strings (NOT double quotes ")
+3. If existing code has triple quotes """, convert to ''' in your output
+4. DO NOT add backslashes before existing quotes
+5. Keep all imports, all functions, all classes - just add your changes
+
+Example - If file has:
+def get_data():
+    """Get data from API"""
+    return data
+
+When modifying, write:
+{{"file_path": "file.py", "content": "def get_data():\\n    '''Get data from API'''\\n    return data\\n"}}
+
+Notice: """ became ''' (triple single quotes)
+
 STEP-BY-STEP WORKFLOW:
 1. Read the file first: Action: read_file, Action Input: test.py (just the filename, NO JSON)
 2. Decide: Am I MODIFYING existing code OR ADDING new code?
 3. Execute the appropriate action with JSON format
+4. If modifying: Include COMPLETE file with ALL existing code
 
 RULE 1 - MODIFYING EXISTING CODE (changing a function, adding docstring to existing function):
 - Use: write_file

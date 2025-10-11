@@ -9,7 +9,7 @@ from langchain_core.prompt_values import StringPromptValue
 from langchain_core.prompt_values import PromptValue
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
-from tools.file_operations import FileOperations
+from tools.file_operations import FileOperations # Assumed to exist
 from pydantic import Field
 import json
 import os
@@ -221,9 +221,9 @@ class DeveloperAgent:
             else:
                 suggestions.append("Make sure you've authenticated with: gcloud auth application-default login")
             
-            suggestion_text = "\n  - ".join(suggestions)
+            suggestion_text = "\n  - ".join(suggestions)
             raise RuntimeError(
-                f"Failed to initialize VertexAI: {error_msg}\n\nSuggestions:\n  - {suggestion_text}"
+                f"Failed to initialize VertexAI: {error_msg}\n\nSuggestions:\n  - {suggestion_text}"
             )
             
         
@@ -242,7 +242,8 @@ class DeveloperAgent:
             cleaned = input_str.strip()
 
             # Replace real newlines inside strings with escaped ones
-            cleaned = cleaned.replace("\n", "\\n")
+            # This is complex and often dangerous, better to rely on regex fallbacks
+            # cleaned = cleaned.replace("\n", "\\n")
 
             # Sometimes model omits closing braces
             if not cleaned.endswith("}"):
@@ -252,13 +253,11 @@ class DeveloperAgent:
             try:
                 return json.loads(cleaned)
             except json.JSONDecodeError:
-                # Last resort: extract with regex
-                match = re.search(r'"file_path"\s*:\s*"([^"]+)"', cleaned)
-                content_match = re.search(r'"content"\s*:\s*"(.+)"', cleaned)
-                if match and content_match:
-                    return {"file_path": match.group(1), "content": content_match.group(1)}
-        return None
+                # Last resort: extraction handled by the wrapper's fallback
+                return None
 
+    # NOTE: _fix_python_formatting is largely redundant due to prompt/JSON handling.
+    # Leaving it here but removing calls in wrappers for stability.
     def _fix_python_formatting(self, content: str) -> str:
         """Auto-fix single-line Python code by adding proper newlines."""
         # First, check if content has LITERAL \n strings (not actual newlines)
@@ -280,8 +279,8 @@ class DeveloperAgent:
         if 'def ' in content or 'class ' in content or 'import ' in content:
             # Add newline after colons followed by non-whitespace
             import re
-            # Replace ': ' with ':\n    ' for function/class definitions
-            fixed = re.sub(r':\s+(?=\S)', ':\n    ', content)
+            # Replace ': ' with ':\n    ' for function/class definitions
+            fixed = re.sub(r':\s+(?=\S)', ':\n    ', content)
             # Ensure ends with newline
             if not fixed.endswith('\n'):
                 fixed += '\n'
@@ -304,7 +303,7 @@ class DeveloperAgent:
                 return {
                     "status": "error",
                     "message": f"Invalid JSON format. Could not parse input. "
-                            f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
+                                f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
                 }
 
             file_path = data.get("file_path")
@@ -313,12 +312,9 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # Auto-fix single-line Python code
-            if file_path.endswith('.py'):
-                content = self._fix_python_formatting(content)
-
-            # Content is already properly decoded by JSON parser
-            # JSON parser converts \n to actual newlines automatically
+            # FIX: REMOVED CALL TO _fix_python_formatting.
+            # Content is already properly decoded by JSON parser (\\n -> \n)
+            
             return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -341,18 +337,20 @@ class DeveloperAgent:
                         content = content_match.group(1)
                         # Remove trailing quote and brace if present
                         content = content.rstrip('"}\' \n\r\t')
-                        # Unescape common patterns
+                        
+                        # FIX: UNESCAPE common patterns robustly
                         content = content.replace('\\n', '\n').replace('\\t', '\t')
-                        content = content.replace('\\\\', '\\').replace("\\\"", '"').replace("\\'", "'")
+                        content = content.replace('\\\\', '\\').replace('\\"', '"').replace('\\\'', "'")
+                        
                         return self.file_ops.write_file(file_path, content)
             except Exception as fallback_error:
                 # Log fallback error for debugging
-                print(f"Fallback parser error: {fallback_error}")
+                print(f"Fallback parser error in write: {fallback_error}")
             
             # Provide detailed error with example
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hello')\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error writing file: {str(e)}"}
@@ -365,7 +363,7 @@ class DeveloperAgent:
                 return {
                     "status": "error",
                     "message": f"Invalid JSON format. Could not parse input. "
-                            f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
+                                f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
                 }
 
             file_path = data.get("file_path")
@@ -374,12 +372,9 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # Auto-fix single-line Python code
-            if file_path.endswith('.py'):
-                content = self._fix_python_formatting(content)
-
-            # Content is already properly decoded by JSON parser
-            # No additional processing needed
+            # FIX: REMOVED CALL TO _fix_python_formatting.
+            # Content is already properly decoded by JSON parser (\\n -> \n)
+            
             return self.file_ops.append_to_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -398,15 +393,18 @@ class DeveloperAgent:
                     if content_match:
                         content = content_match.group(1)
                         content = content.rstrip('"}\' \n\r\t')
+                        
+                        # FIX: UNESCAPE common patterns robustly
                         content = content.replace('\\n', '\n').replace('\\t', '\t')
-                        content = content.replace('\\\\', '\\').replace("\\\"", '"').replace("\\'", "'")
+                        content = content.replace('\\\\', '\\').replace('\\"', '"').replace('\\\'', "'")
+                        
                         return self.file_ops.append_to_file(file_path, content)
             except Exception as fallback_error:
-                print(f"Fallback parser error: {fallback_error}")
+                print(f"Fallback parser error in append: {fallback_error}")
             
             return {
                 "status": "error", 
-                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def goodbye():\\\\n    print('Bye')\"}}"
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST close the JSON string properly. CORRECT FORMAT: {{\"file_path\": \"example.py\", \"content\": \"def goodbye():\\\\n    print('Bye')\"}}"
             }
         except Exception as e:
             return {"status": "error", "message": f"Error appending to file: {str(e)}"}
@@ -422,12 +420,12 @@ class DeveloperAgent:
             Tool(
                 name="write_file",
                 func=self._write_file_wrapper,
-                description='Creates a new file or REPLACES entire file content. Use for: (1) Creating new files, (2) Modifying existing code. When modifying, provide the COMPLETE file content with your changes. Input: {"file_path": "path/to/file", "content": "complete file content"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
+                description='Creates a new file or REPLACES entire file content. Use for: (1) Creating new files, (2) Modifying existing code (e.g., changing a function, adding an import). When modifying, you MUST provide the COMPLETE file content with your changes, including ALL existing, UNCHANGED code. Input: {"file_path": "path/to/file", "content": "complete file content"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
             ),
             Tool(
                 name="append_to_file",
                 func=self._append_to_file_wrapper,
-                description='Adds content to the END of an existing file. Use ONLY for adding NEW functions/classes to Python files. Do NOT use for modifying existing code. Always start content with \\n\\n for proper spacing. Input: {"file_path": "path/to/file", "content": "new code to add"}. Example: {"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print(\'Bye\')"}'
+                description='Adds content to the END of an existing file. Use ONLY for adding NEW functions/classes/code blocks to the end of a file. Do NOT use for modifying existing code. Always start content with \\n\\n for proper spacing between the new and existing code. Input: {"file_path": "path/to/file", "content": "new code to add"}. Example: {"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print(\'Bye\')"}'
             ),
             Tool(
                 name="delete_file",
@@ -448,51 +446,37 @@ class DeveloperAgent:
             template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
 
 ⚠️ CRITICAL - READ THIS FIRST ⚠️
-When writing Python code in JSON, you MUST use \\n (backslash-n) for line breaks.
+When writing Python code in JSON, you **MUST** use \\n (backslash-n) for line breaks.
 
-EXAMPLE - This is EXACTLY what you must type:
-Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
-                                                                    ↑↑        ↑↑
-                                                            These are: backslash + n
+EXAMPLE - This is **EXACTLY** what you must type for multi-line content:
+Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
+                                                                    ↑↑        ↑↑
+                                                            These are: **single** backslash + n
 
 This creates a file with MULTIPLE LINES:
 def hello():
-    print('Hi')
-
-WRONG EXAMPLES - DO NOT DO THIS:
-❌ {{"content": "def hello(): print('Hi')"}}  ← Missing \\n (creates single line)
-❌ {{"content": "def hello():\\\\n    print('Hi')"}}  ← Double backslash (wrong)
-✅ {{"content": "def hello():\\n    print('Hi')\\n"}}  ← Correct (single backslash + n)
+    print('Hi')
 
 APPEND EXAMPLE - When adding a function to existing file:
-Existing file has: def hello():\\n    print('Hello')\\n
+Existing file has: def hello():\\n    print('Hello')\\n
 
-To add goodbye function, use append_to_file with:
-Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
-                                                      ↑↑↑↑
-                                            Start with TWO \\n for blank line
-
-Result: File will have BOTH functions on SEPARATE LINES:
-def hello():
-    print('Hello')
-
-def goodbye():
-    print('Bye')
+To add goodbye function, use **append_to_file** with:
+Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
+                                                      **↑↑↑↑**
+                                            Start with **TWO \\n** for a blank line separator.
 
 IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
-1. IMMEDIATELY execute the changes using the appropriate tools
-2. DO NOT just describe what you would do
-3. DO NOT say "I have modified" or "I have updated" unless you actually used a tool
-4. Take action first, then report what you did
+1. **IMMEDIATELY** execute the changes using the appropriate tools
+2. **DO NOT** just describe what you would do
+3. Take action first, then report what you did
 
 You have access to the following tools:
 {tools}
 
 OUTPUT FORMAT - CRITICAL:
-Your response MUST be plain text following this exact format. DO NOT output JSON objects or dictionaries.
+Your response **MUST** be plain text following this exact format. **DO NOT** output JSON objects or dictionaries.
 
 CORRECT FORMAT:
-Question: the input question you must answer
 Thought: I need to use [tool_name] to make this change
 Action: the action to take, must be one of [{tool_names}]
 Action Input: the input to the action
@@ -501,114 +485,41 @@ Observation: the result of the action
 Thought: I have completed the requested actions
 Final Answer: [Describe what you actually did and the results]
 
-WRONG - DO NOT DO THIS:
-❌ {{"thought": "I need to...", "action": "write_file"}}  // DO NOT output as JSON/dict
-✅ Thought: I need to...
-   Action: write_file  // Output as plain text
-
 CRITICAL RULES - READ CAREFULLY:
-- You CANNOT modify files by just thinking about it - you MUST use write_file or append_to_file tools
+- You CANNOT modify files by just thinking about it - you MUST use **write_file** or **append_to_file** tools
 - NEVER say "I have modified the file" without an Action/Observation showing the tool was used
-- If you read a file and identified changes needed, you MUST then use write_file to apply them
-- After reading a file, the next step is ALWAYS an Action (write_file/append_to_file), not Final Answer
-- The Observation will confirm if the file was actually modified
-- Only report success in Final Answer if you see "File written successfully" in an Observation
+- After reading a file, the next step is **ALWAYS** an Action (write_file/append_to_file), not Final Answer
+- Only report success in Final Answer if you see "File written successfully" or "File content appended successfully" in an Observation
 
 HOW TO WORK WITH PYTHON FILES - CRITICAL INSTRUCTIONS:
 
 TOOL INPUT FORMATS - IMPORTANT:
 - read_file: Simple string (just the file path)
-  Example: Action Input: test.py
+  Example: Action Input: test.py
 - write_file: JSON object with file_path and content
-  Example: Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
+  Example: Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
 - append_to_file: JSON object with file_path and content
-  Example: Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
+  Example: Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
 
-⚠️ CRITICAL - WHEN MODIFYING EXISTING FILES:
-When you read a file and need to modify it, you MUST:
-1. Include ALL existing code (don't remove any functions/classes)
-2. Use SINGLE quotes ' for Python strings (NOT double quotes ")
-3. If existing code has triple quotes """, convert to ''' in your output
-4. DO NOT add backslashes before existing quotes
-5. Keep all imports, all functions, all classes - just add your changes
+⚠️ **CRITICAL - PREVENTING FUNCTION DELETION (The Golden Rule for write_file):**
+When you use `write_file` to modify an existing file (e.g., change an import, edit a function, or add a docstring):
+1.  **STEP 1: Read the file** to get ALL existing content.
+2.  **STEP 2: Use write_file** with a `content` string that **INCLUDES ALL CODE** (the existing, unmodified code **plus** your changes).
+3.  **If you omit any existing functions or classes, they will be permanently DELETED.**
 
-Example - If file has:
-def get_data():
-    """Get data from API"""
-    return data
-
-When modifying, write:
-{{"file_path": "file.py", "content": "def get_data():\\n    '''Get data from API'''\\n    return data\\n"}}
-
-Notice: """ became ''' (triple single quotes)
-
-STEP-BY-STEP WORKFLOW:
-1. Read the file first: Action: read_file, Action Input: test.py (just the filename, NO JSON)
-2. Decide: Am I MODIFYING existing code OR ADDING new code?
-3. Execute the appropriate action with JSON format
-4. If modifying: Include COMPLETE file with ALL existing code
-
-RULE 1 - MODIFYING EXISTING CODE (changing a function, adding docstring to existing function):
-- Use: write_file
-- Content: COMPLETE file with ALL functions (existing + modified)
-- Format: Each line separated by \\n
-
-RULE 2 - ADDING NEW CODE (new function, new class):
-- Use: append_to_file  
-- Content: ONLY the new code to add
-- Format: Start with \\n\\n then the new code
+Example Workflow to Modify `existing_func`:
+1.  **Action: read_file**
+    **Action Input: test.py**
+    **Observation: def existing_func():\\n    return 'Old'\\n**
+2.  **Thought: I need to rewrite the ENTIRE file with the change.**
+    **Action: write_file**
+    **Action Input: {{"file_path": "test.py", "content": "def existing_func():\\n    return 'New'\\n"}}**
 
 FORMATTING PYTHON CODE - CRITICAL:
-
-The JSON Action Input must be on ONE line. Use \\n to create line breaks in the Python code.
-
-VISUAL EXAMPLE - How \\n works:
-JSON Input (one line):
-"def hello():\\n    print('Hi')\\n"
-
-Becomes in the file (multiple lines):
-def hello():
-    print('Hi')
-
-STEP-BY-STEP EXAMPLE:
-If you want to create this Python code:
-def greet(name):
-    '''Greet a person'''
-    return f'Hello, {{name}}!'
-
-You write it in JSON as:
-"def greet(name):\\n    '''Greet a person'''\\n    return f'Hello, {{name}}!'\\n"
-
-Notice:
-- After "def greet(name):" → add \\n
-- After "'''Greet a person'''" → add \\n  
-- After "return f'Hello, {{name}}!'" → add \\n
-- Use 4 spaces for indentation: \\n    (\\n followed by 4 spaces)
-
-CORRECT EXAMPLE 1 - Create file:
-Action: write_file
-Action Input: {{"file_path": "test.py", "content": "def hello():\\n    '''Say hello'''\\n    print('Hello')\\n"}}
-
-Result in file:
-def hello():
-    '''Say hello'''
-    print('Hello')
-
-CORRECT EXAMPLE 2 - Add function:
-Action: append_to_file
-Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    '''Say goodbye'''\\n    print('Bye')\\n"}}
-
-Result added to file:
-
-def goodbye():
-    '''Say goodbye'''
-    print('Bye')
-
-CRITICAL RULES:
-- Every line of Python code must end with \\n
-- Indentation: use \\n followed by spaces (\\n    for 4 spaces)
-- Use single quotes ' not double quotes "
-- Use ''' for docstrings not \\\"\\\"\\\""
+- Every line of Python code must end with **\\n**
+- Indentation: use **\\n** followed by spaces (**\\n    ** for 4 spaces)
+- Use **single quotes ' not double quotes "** for Python strings.
+- Use **'''** for docstrings, not **\\\"\\\"\\\"**
 
 Begin!
 
@@ -701,7 +612,8 @@ class CustomOutputParser(AgentOutputParser):
                     # Clean up the action input (remove quotes, newlines before observation)
                     if "\nObservation:" in action_input:
                         action_input = action_input.split("\nObservation:")[0].strip()
-                    action_input = action_input.strip('"').strip("'").strip()
+                    # Keep all quotes/braces for robust JSON passing
+                    # action_input = action_input.strip('"').strip("'").strip() # <-- Removed this strip
                     
                     return AgentAction(
                         tool=action,
@@ -718,7 +630,3 @@ class CustomOutputParser(AgentOutputParser):
             return_values={"output": text.strip()},
             log=text
         )
-            
-    def parse_ai_message(self, message: Dict[str, Any]) -> Union[AgentAction, AgentFinish]:
-        """Parse the AI message."""
-        return self.parse(message["content"])

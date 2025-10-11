@@ -61,10 +61,9 @@ class CustomPromptTemplate(BasePromptTemplate):
     template: str = Field(..., description="The main text template.")
     tools: List[Any] = Field(default_factory=list, description="Tools available to the agent.")
 
-    def __init__(self, template: str, tools: List[Any], input_variables: List[str]):
-        super().__init__(input_variables=input_variables)
-        object.__setattr__(self, "template", template)
-        object.__setattr__(self, "tools", tools)
+    def __init__(self, *, template: str, tools: List[Any], input_variables: List[str]):
+        # Pass all fields directly to BasePromptTemplate (Pydantic model)
+        super().__init__(template=template, tools=tools, input_variables=input_variables)
 
     def format(self, **kwargs) -> str:
         history = kwargs.get("history", "")

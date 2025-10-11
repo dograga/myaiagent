@@ -217,7 +217,7 @@ class DeveloperAgent:
             Tool(
                 name="write_file",
                 func=self._write_file_wrapper,
-                description='Useful for writing content to a file. Input MUST be valid JSON on ONE LINE: {"file_path": "path/to/file", "content": "text to write"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
+                description='REQUIRED for creating or updating files. You MUST use this tool to actually modify file contents. Just reading a file and thinking about changes does NOT modify it. Input MUST be valid JSON on ONE LINE: {"file_path": "path/to/file", "content": "text to write"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
             ),
             Tool(
                 name="append_to_file",
@@ -245,7 +245,7 @@ class DeveloperAgent:
 IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
 1. IMMEDIATELY execute the changes using the appropriate tools
 2. DO NOT just describe what you would do
-3. DO NOT ask for permission or approval
+3. DO NOT say "I have modified" or "I have updated" unless you actually used a tool
 4. Take action first, then report what you did
 
 You have access to the following tools:
@@ -254,7 +254,7 @@ You have access to the following tools:
 You MUST use the following format exactly:
 
 Question: the input question you must answer
-Thought: I will now execute this action
+Thought: I need to use [tool_name] to make this change
 Action: the action to take, must be one of [{tool_names}]
 Action Input: the input to the action
 Observation: the result of the action
@@ -262,11 +262,13 @@ Observation: the result of the action
 Thought: I have completed the requested actions
 Final Answer: [Describe what you actually did and the results]
 
-CRITICAL RULES:
-- ALWAYS execute actions immediately, don't just describe them
-- Use tools to make changes, don't just explain what changes to make
-- When user says "go ahead" or "do it", they are confirming you should have already done it
-- Report what you DID, not what you WILL do
+CRITICAL RULES - READ CAREFULLY:
+- You CANNOT modify files by just thinking about it - you MUST use write_file or append_to_file tools
+- NEVER say "I have modified the file" without an Action/Observation showing the tool was used
+- If you read a file and identified changes needed, you MUST then use write_file to apply them
+- After reading a file, the next step is ALWAYS an Action (write_file/append_to_file), not Final Answer
+- The Observation will confirm if the file was actually modified
+- Only report success in Final Answer if you see "File written successfully" in an Observation
 
 JSON FORMAT FOR write_file AND append_to_file:
 For write_file or append_to_file, the Action Input MUST be valid JSON on a single line.
@@ -380,7 +382,10 @@ Question: {input}
             agent=agent,
             tools=self.tools,
             verbose=True,
-            memory=memory
+            memory=memory,
+            max_iterations=10,  # Allow multiple steps
+            early_stopping_method="generate",  # Don't stop early
+            handle_parsing_errors=True  # Handle parsing errors gracefully
         )
     
     def run(self, query: str, return_details: bool = False) -> Union[str, Dict[str, Any]]:

@@ -30,6 +30,9 @@ class VertexAIWrapper(VertexAI):
         """Call the VertexAI API and ensure string output."""
         try:
             result = super()._call(prompt, stop, run_manager, **kwargs)
+            if isinstance(result, list):
+                result = " ".join(map(str, result))
+            return str(result)
         except Exception as e:
             # If there's an error, try to extract the result
             if hasattr(e, 'args') and len(e.args) > 0:
@@ -53,30 +56,21 @@ class VertexAIWrapper(VertexAI):
 
 # Custom prompt template for the agent
 class CustomPromptTemplate(StringPromptTemplate):
-    template: str
-    tools: List[Tool]
-    
     def format(self, **kwargs) -> str:
-        # Get the intermediate steps
-        intermediate_steps = kwargs.pop("intermediate_steps")
-        
-        # Format the tools and tool names
-        tools = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
-        tool_names = ", ".join([tool.name for tool in self.tools])
-        
-        # Format the intermediate steps
+        # Convert history list to readable text if needed
+        history = kwargs.get("history", "")
+        if isinstance(history, list):
+            history = "\n".join([h.content if hasattr(h, "content") else str(h) for h in history])
+            kwargs["history"] = history
+
+        intermediate_steps = kwargs.pop("intermediate_steps", [])
         thoughts = ""
         for action, observation in intermediate_steps:
-            thoughts += f"Thought: {action.log}\n"
-            thoughts += f"Observation: {observation}\n"
-        
-        # Set the agent_scratchpad variable to record what was previously done
+            thoughts += f"\nThought: {action.log}\nObservation: {observation}\n"
         kwargs["agent_scratchpad"] = thoughts
-        kwargs["tools"] = tools
-        kwargs["tool_names"] = tool_names
-        
-        return self.template.format(**kwargs)
 
+        return self.template.format(**kwargs)
+        
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):
         # Initialize file operations

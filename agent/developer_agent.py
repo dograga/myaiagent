@@ -269,20 +269,8 @@ class DeveloperAgent:
             if not file_path or content is None:
                 return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
 
-            # Validate Python files - check if code looks reasonable
-            if file_path.endswith('.py'):
-                # Check if Python code has newlines (not all on one line)
-                if 'def ' in content or 'class ' in content:
-                    # Count lines - if it's Python code, it should have multiple lines
-                    line_count = content.count('\n')
-                    if line_count < 2 and len(content) > 50:
-                        return {
-                            "status": "error",
-                            "message": f"Python code appears to be on a single line. Use \\n to separate lines. Example: \"def hello():\\n    print('Hi')\\n\""
-                        }
-
             # Content is already properly decoded by JSON parser
-            # No additional processing needed
+            # JSON parser converts \n to actual newlines automatically
             return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -459,48 +447,57 @@ RULE 2 - ADDING NEW CODE (new function, new class):
 - Content: ONLY the new code to add
 - Format: Start with \\n\\n then the new code
 
-FORMATTING PYTHON CODE IN JSON:
-The JSON must be on ONE line. Use \\n to represent line breaks.
+FORMATTING PYTHON CODE - CRITICAL:
 
-Example of correct formatting:
+The JSON Action Input must be on ONE line. Use \\n to create line breaks in the Python code.
+
+VISUAL EXAMPLE - How \\n works:
+JSON Input (one line):
 "def hello():\\n    print('Hi')\\n"
 
-This becomes in the file:
+Becomes in the file (multiple lines):
 def hello():
     print('Hi')
 
-CORRECT EXAMPLE - Create new file:
-Action: write_file
-Action Input: {{"file_path": "test.py", "content": "def hello():\\n    '''Greet user'''\\n    print('Hello')\\n"}}
+STEP-BY-STEP EXAMPLE:
+If you want to create this Python code:
+def greet(name):
+    '''Greet a person'''
+    return f'Hello, {{name}}!'
 
-CORRECT EXAMPLE - Add function to existing file:
-Action: read_file
-Action Input: test.py
-Observation: def hello():\\n    print('Hello')\\n
+You write it in JSON as:
+"def greet(name):\\n    '''Greet a person'''\\n    return f'Hello, {{name}}!'\\n"
 
-Action: append_to_file
-Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    '''Say goodbye'''\\n    print('Bye')\\n"}}
+Notice:
+- After "def greet(name):" → add \\n
+- After "'''Greet a person'''" → add \\n  
+- After "return f'Hello, {{name}}!'" → add \\n
+- Use 4 spaces for indentation: \\n    (\\n followed by 4 spaces)
 
-CORRECT EXAMPLE - Modify existing function:
-Action: read_file
-Action Input: test.py
-Observation: def hello():\\n    print('Hello')\\n
-
+CORRECT EXAMPLE 1 - Create file:
 Action: write_file
 Action Input: {{"file_path": "test.py", "content": "def hello():\\n    '''Say hello'''\\n    print('Hello')\\n"}}
 
-CRITICAL - PYTHON CODE RULES:
-- Use \\n for each new line (NOT actual line breaks in JSON)
-- Use single quotes ' for Python strings: print('hello')
-- Use ''' for docstrings: '''This is a docstring'''
-- Indent with spaces: \\n    (4 spaces after \\n)
-- Each Python statement on its own line with \\n
+Result in file:
+def hello():
+    '''Say hello'''
+    print('Hello')
 
-WRONG - DO NOT DO THIS:
-❌ Writing code as one line: "def hello(): print('Hi')"
-❌ Using double quotes: print(\\"hello\\")
-❌ Missing \\n between lines
-❌ Using append_to_file to modify existing code
+CORRECT EXAMPLE 2 - Add function:
+Action: append_to_file
+Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    '''Say goodbye'''\\n    print('Bye')\\n"}}
+
+Result added to file:
+
+def goodbye():
+    '''Say goodbye'''
+    print('Bye')
+
+CRITICAL RULES:
+- Every line of Python code must end with \\n
+- Indentation: use \\n followed by spaces (\\n    for 4 spaces)
+- Use single quotes ' not double quotes "
+- Use ''' for docstrings not \\\"\\\"\\\""
 
 Begin!
 

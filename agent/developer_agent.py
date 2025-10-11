@@ -279,6 +279,12 @@ class DeveloperAgent:
         
         return content
     
+    def _read_file_wrapper(self, file_path: str) -> Dict[str, Any]:
+        """Wrapper for read_file that accepts a simple file path string."""
+        # Clean up the input - remove any quotes or whitespace
+        file_path = file_path.strip().strip('"').strip("'")
+        return self.file_ops.read_file(file_path)
+    
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""
         try:
@@ -400,8 +406,8 @@ class DeveloperAgent:
         return [
             Tool(
                 name="read_file",
-                func=self.file_ops.read_file,
-                description="Useful for reading the contents of a file. Input should be the file path relative to the project root."
+                func=self._read_file_wrapper,
+                description='Reads the contents of a file. Input must be a simple string (just the file path). Example: test.py or src/main.py'
             ),
             Tool(
                 name="write_file",
@@ -500,10 +506,18 @@ CRITICAL RULES - READ CAREFULLY:
 
 HOW TO WORK WITH PYTHON FILES - CRITICAL INSTRUCTIONS:
 
+TOOL INPUT FORMATS - IMPORTANT:
+- read_file: Simple string (just the file path)
+  Example: Action Input: test.py
+- write_file: JSON object with file_path and content
+  Example: Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
+- append_to_file: JSON object with file_path and content
+  Example: Action Input: {{"file_path": "test.py", "content": "\\n\\ndef goodbye():\\n    print('Bye')\\n"}}
+
 STEP-BY-STEP WORKFLOW:
-1. Read the file first: Action: read_file, Action Input: filename.py
+1. Read the file first: Action: read_file, Action Input: test.py (just the filename, NO JSON)
 2. Decide: Am I MODIFYING existing code OR ADDING new code?
-3. Execute the appropriate action
+3. Execute the appropriate action with JSON format
 
 RULE 1 - MODIFYING EXISTING CODE (changing a function, adding docstring to existing function):
 - Use: write_file

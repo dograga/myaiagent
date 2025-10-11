@@ -1,14 +1,14 @@
 # Developer Assistant AI Agent
 
-A LangChain-based developer assistant that helps with code-related tasks using natural language processing and GCP Vector AI for semantic search.
+A LangChain-based developer assistant that helps with code-related tasks using natural language processing powered by Google's Vertex AI.
 
 ## Features
 
-- Natural language processing for developer tasks
+- Natural language processing for developer tasks using Vertex AI
 - File operations (read, write, append, delete)
 - Directory listing
-- GCP Vector AI integration for semantic search
 - FastAPI-based REST API
+- Conversation memory for context-aware interactions
 
 ## Prerequisites
 
@@ -52,10 +52,6 @@ Update the `.env` file with your GCP project details:
 # GCP Configuration
 GCP_PROJECT_ID=your-project-id
 GCP_LOCATION=us-central1
-
-# Vector Store Configuration (Optional)
-VECTOR_INDEX_ENDPOINT=your-index-endpoint
-DEPLOYED_INDEX_ID=your-deployed-index-id
 
 # Application Settings
 PROJECT_ROOT=.
@@ -129,10 +125,9 @@ curl -X POST "http://localhost:8000/query" \
 
 The application consists of several main components:
 
-1. **File Operations**: Handles all file system interactions
-2. **GCP Vector Store**: Manages vector embeddings and similarity search
-3. **Developer Agent**: The main LangChain agent that processes natural language queries
-4. **FastAPI Server**: Provides a REST API for interacting with the agent
+1. **File Operations** (`tools/file_operations.py`): Handles all file system interactions
+2. **Developer Agent** (`agent/developer_agent.py`): The main LangChain agent that processes natural language queries using Vertex AI
+3. **FastAPI Server** (`main.py`): Provides a REST API for interacting with the agent
 
 ## Security Considerations
 

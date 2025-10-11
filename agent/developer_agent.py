@@ -2,20 +2,17 @@ from typing import List, Dict, Any, Optional, Union, Mapping
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
 from langchain.agents.agent import AgentOutputParser
 from langchain.chains import LLMChain
-from langchain.prompts import StringPromptTemplate
+from langchain.prompts import StringPromptTemplate, BasePromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
-from langchain.schema import AgentAction, AgentFinish
+from langchain.schema import AgentAction, AgentFinish, PromptValue
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
 from tools.file_operations import FileOperations
-from langchain.schema import PromptValue
+from pydantic import Field
 import json
 import os
 import re
 from dotenv import load_dotenv
-from typing import Any, List
-from langchain.prompts import BasePromptTemplate
-from pydantic import Field
 
 # Load environment variables
 load_dotenv()
@@ -55,8 +52,7 @@ class VertexAIWrapper(VertexAI):
             result = ' '.join(str(item) for item in result)
         return str(result)
 
-from langchain.prompts import BasePromptTemplate
-
+# Custom prompt template for the agent
 class CustomPromptTemplate(BasePromptTemplate):
     template: str = Field(..., description="The main text template.")
     tools: List[Any] = Field(default_factory=list, description="Tools available to the agent.")
@@ -66,6 +62,7 @@ class CustomPromptTemplate(BasePromptTemplate):
         super().__init__(template=template, tools=tools, input_variables=input_variables)
 
     def format(self, **kwargs) -> str:
+        # Handle history
         history = kwargs.get("history", "")
         if isinstance(history, list):
             history = "\n".join([
@@ -74,11 +71,18 @@ class CustomPromptTemplate(BasePromptTemplate):
             ])
             kwargs["history"] = history
 
+        # Handle intermediate steps
         intermediate_steps = kwargs.pop("intermediate_steps", [])
         thoughts = ""
         for action, observation in intermediate_steps:
             thoughts += f"\nThought: {action.log}\nObservation: {observation}\n"
         kwargs["agent_scratchpad"] = thoughts
+
+        # Format tools and tool names for the template
+        tools_str = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
+        tool_names = ", ".join([tool.name for tool in self.tools])
+        kwargs["tools"] = tools_str
+        kwargs["tool_names"] = tool_names
 
         return self.template.format(**kwargs)
     

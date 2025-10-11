@@ -73,61 +73,70 @@ class VertexAIWrapper(VertexAI):
     
     def generate(self, prompts: List[str], stop: Optional[List[str]] = None, **kwargs) -> Any:
         """Override generate to ensure string output in generations."""
+        from langchain.schema import Generation, LLMResult
+        
         try:
+            # Call parent generate
             result = super().generate(prompts, stop, **kwargs)
         except Exception as e:
-            # If generation fails, create a simple error response
-            from langchain.schema import Generation, LLMResult
-            error_text = f"Error in generation: {str(e)}"
-            return LLMResult(generations=[[Generation(text=error_text)]])
+            # If generation fails due to validation, try to extract from error
+            error_str = str(e)
+            if 'validation error' in error_str.lower() and 'input_type=list' in error_str:
+                # The error contains the actual list that failed validation
+                # Return a simple text response
+                return LLMResult(generations=[[Generation(text="Thought: I need to respond in plain text format.\nFinal Answer: I understand.")]])
+            else:
+                # Other errors
+                return LLMResult(generations=[[Generation(text=f"Error in generation: {str(e)}")]])
         
-        # Ensure all generation text outputs are strings
-        for generation_list in result.generations:
-            for generation in generation_list:
-                if hasattr(generation, 'text'):
-                    text_value = generation.text
-                    
-                    # Handle list of dicts (like [{"thought": "...", "text": "..."}])
-                    if isinstance(text_value, list):
-                        if len(text_value) > 0:
-                            # If list contains dicts, try to extract meaningful content
-                            if isinstance(text_value[0], dict):
-                                # Look for common keys: 'text', 'content', 'output'
-                                extracted = []
-                                for item in text_value:
-                                    if 'text' in item:
-                                        extracted.append(str(item['text']))
-                                    elif 'content' in item:
-                                        extracted.append(str(item['content']))
-                                    elif 'output' in item:
-                                        extracted.append(str(item['output']))
-                                    else:
-                                        # Just convert the whole dict to string
-                                        extracted.append(str(item))
-                                text_value = ' '.join(extracted) if extracted else str(text_value[0])
+        # Process all generations to ensure text is a string
+        try:
+            for generation_list in result.generations:
+                for generation in generation_list:
+                    if hasattr(generation, 'text'):
+                        text_value = generation.text
+                        
+                        # Handle list of any type
+                        if isinstance(text_value, list):
+                            if len(text_value) > 0:
+                                # If list contains dicts
+                                if isinstance(text_value[0], dict):
+                                    extracted = []
+                                    for item in text_value:
+                                        if 'text' in item:
+                                            extracted.append(str(item['text']))
+                                        elif 'content' in item:
+                                            extracted.append(str(item['content']))
+                                        elif 'output' in item:
+                                            extracted.append(str(item['output']))
+                                        else:
+                                            extracted.append(str(item))
+                                    text_value = ' '.join(extracted) if extracted else str(text_value[0])
+                                else:
+                                    # List of strings or other
+                                    text_value = ' '.join(str(item) for item in text_value)
                             else:
-                                # List of strings or other types
-                                text_value = ' '.join(str(item) for item in text_value)
-                        else:
-                            text_value = ""
-                    
-                    # Handle dict
-                    elif isinstance(text_value, dict):
-                        # Try common keys first
-                        if 'text' in text_value:
-                            text_value = str(text_value['text'])
-                        elif 'content' in text_value:
-                            text_value = str(text_value['content'])
-                        elif 'output' in text_value:
-                            text_value = str(text_value['output'])
-                        else:
+                                text_value = ""
+                        
+                        # Handle dict
+                        elif isinstance(text_value, dict):
+                            if 'text' in text_value:
+                                text_value = str(text_value['text'])
+                            elif 'content' in text_value:
+                                text_value = str(text_value['content'])
+                            elif 'output' in text_value:
+                                text_value = str(text_value['output'])
+                            else:
+                                text_value = str(text_value)
+                        
+                        # Ensure string
+                        if not isinstance(text_value, str):
                             text_value = str(text_value)
-                    
-                    # Final safety: ensure string
-                    if not isinstance(text_value, str):
-                        text_value = str(text_value)
-                    
-                    generation.text = text_value
+                        
+                        generation.text = text_value
+        except Exception as e:
+            # If processing fails, return safe response
+            return LLMResult(generations=[[Generation(text=f"Processing error: {str(e)}")]])
         
         return result
 
@@ -192,8 +201,8 @@ class DeveloperAgent:
                 project=gcp_project,
                 location=gcp_location,
                 max_output_tokens=2048,  # Increased for complex projects
-                temperature=0.2,
-                top_p=0.8,
+                temperature=0,  # Set to 0 for deterministic output
+                top_p=0.95,
                 top_k=40,
                 verbose=True
             )
@@ -394,6 +403,18 @@ class DeveloperAgent:
         # Define the prompt template based on approval mode
         if self.auto_approve:
             template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
+
+⚠️ CRITICAL - READ THIS FIRST ⚠️
+When writing Python code in JSON, you MUST use \\n for line breaks.
+
+EXAMPLE - This is how you write Python code:
+Action Input: {{"file_path": "test.py", "content": "def hello():\\n    print('Hi')\\n"}}
+
+This creates a file with:
+def hello():
+    print('Hi')
+
+NOT: {{"content": "def hello(): print('Hi')"}}  ← WRONG (single line)
 
 IMPORTANT BEHAVIOR: You are in AUTO-EXECUTE mode. When asked to make changes:
 1. IMMEDIATELY execute the changes using the appropriate tools

@@ -1,6 +1,6 @@
 # Developer Assistant UI
 
-A modern React-based chat interface for the Developer Assistant AI Agent.
+A modern React + TypeScript chat interface for the Developer Assistant AI Agent.
 
 ## Features
 
@@ -131,6 +131,7 @@ If sessions aren't working:
 ## Technology Stack
 
 - **React 18** - UI framework
+- **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
 - **Axios** - HTTP client
 - **CSS3** - Styling with animations

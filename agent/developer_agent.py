@@ -1,10 +1,11 @@
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Mapping
 from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
 from langchain.agents.agent import AgentOutputParser
 from langchain.chains import LLMChain
 from langchain.prompts import StringPromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.schema import AgentAction, AgentFinish
+from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
 from tools.file_operations import FileOperations
 import json
@@ -14,6 +15,27 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+# Custom VertexAI wrapper that ensures string output
+class VertexAIWrapper(VertexAI):
+    """Wrapper around VertexAI that ensures string output."""
+    
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Call the VertexAI API and ensure string output."""
+        result = super()._call(prompt, stop, run_manager, **kwargs)
+        
+        # Handle list responses
+        if isinstance(result, list):
+            result = ' '.join(str(item) for item in result)
+        
+        # Ensure string output
+        return str(result)
 
 # Custom prompt template for the agent
 class CustomPromptTemplate(StringPromptTemplate):
@@ -58,7 +80,7 @@ class DeveloperAgent:
             )
         
         try:
-            self.llm = VertexAI(
+            self.llm = VertexAIWrapper(
                 model_name=model_name,
                 project=gcp_project,
                 location=gcp_location,

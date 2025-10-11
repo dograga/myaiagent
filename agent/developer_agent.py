@@ -261,13 +261,23 @@ class DeveloperAgent:
 
     def _fix_python_formatting(self, content: str) -> str:
         """Auto-fix single-line Python code by adding proper newlines."""
-        # If content already has newlines, return as-is
+        # First, check if content has LITERAL \n strings (not actual newlines)
+        # This happens when LLM outputs backslash-n as two characters instead of escape sequence
+        if '\\n' in content and '\n' not in content:
+            # Convert literal \n to actual newlines
+            content = content.replace('\\n', '\n')
+            # Also handle other escape sequences
+            content = content.replace('\\t', '\t')
+            return content
+        
+        # If content already has actual newlines, check if it's properly formatted
         if '\n' in content:
+            # Count lines - if it has newlines, assume it's formatted
             return content
         
         # Detect single-line Python code and fix it
         # Pattern: def func(): statement or class Name: statement
-        if 'def ' in content or 'class ' in content:
+        if 'def ' in content or 'class ' in content or 'import ' in content:
             # Add newline after colons followed by non-whitespace
             import re
             # Replace ': ' with ':\n    ' for function/class definitions

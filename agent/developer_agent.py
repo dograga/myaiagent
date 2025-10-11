@@ -156,21 +156,23 @@ class DeveloperAgent:
     def _create_agent(self) -> AgentExecutor:
         """Create and return the agent executor."""
         # Define the prompt template
-        template = """You are a helpful AI developer assistant. You can help with various development tasks.
+        template = """You are a helpful AI developer assistant that helps with code-related tasks like creating, reading, updating, and deleting files.
         
         You have access to the following tools:
         {tools}
         
-        Use the following format:
+        IMPORTANT: You MUST use the following format exactly:
         
         Question: the input question you must answer
-        Thought: you should always think about what to do
-        Action: the action to take, should be one of [{tool_names}]
-        Action Input: the input to the action
+        Thought: think about what to do next
+        Action: the action to take, must be one of [{tool_names}]
+        Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
         Observation: the result of the action
-        ... (this Thought/Action/Action Input/Observation can repeat N times)
+        ... (repeat Thought/Action/Action Input/Observation as needed)
         Thought: I now know the final answer
         Final Answer: the final answer to the original input question
+        
+        CRITICAL: Always end with "Final Answer:" followed by your response. Never give a direct response without this format.
         
         Begin!
         
@@ -226,27 +228,45 @@ class DeveloperAgent:
 class CustomOutputParser(AgentOutputParser):
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         """Parse the output of the LLM."""
+        # Check if this is a final answer
         if "Final Answer:" in text:
             return AgentFinish(
                 return_values={"output": text.split("Final Answer:")[-1].strip()},
                 log=text
             )
         
-        try:
-            action, action_input = text.split("Action:")[-1].split("Action Input:")
-            action = action.strip()
-            action_input = action_input.strip()
-            
-            return AgentAction(
-                tool=action,
-                tool_input=action_input.strip('"').strip("'"),
-                log=text
-            )
-        except Exception as e:
-            return AgentFinish(
-                return_values={"output": f"Error parsing LLM output: {str(e)}. Original output: {text}"},
-                log=text
-            )
+        # Check if this contains Action and Action Input
+        if "Action:" in text and "Action Input:" in text:
+            try:
+                # Extract the action part after the last "Action:" marker
+                action_block = text.split("Action:")[-1]
+                
+                # Split by "Action Input:" to get action and input
+                if "Action Input:" in action_block:
+                    parts = action_block.split("Action Input:", 1)
+                    action = parts[0].strip()
+                    action_input = parts[1].strip()
+                    
+                    # Clean up the action input (remove quotes, newlines before observation)
+                    if "\nObservation:" in action_input:
+                        action_input = action_input.split("\nObservation:")[0].strip()
+                    action_input = action_input.strip('"').strip("'").strip()
+                    
+                    return AgentAction(
+                        tool=action,
+                        tool_input=action_input,
+                        log=text
+                    )
+            except Exception as e:
+                # If parsing fails, treat as final answer
+                pass
+        
+        # If we can't parse it as an action, treat it as a final answer
+        # This handles cases where the LLM gives a direct response
+        return AgentFinish(
+            return_values={"output": text.strip()},
+            log=text
+        )
             
     def parse_ai_message(self, message: Dict[str, Any]) -> Union[AgentAction, AgentFinish]:
         """Parse the AI message."""

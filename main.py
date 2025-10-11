@@ -22,7 +22,11 @@ app.add_middleware(
 )
 
 # Initialize the agent and session manager
-agent = DeveloperAgent(project_root=os.getcwd())
+project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+if not os.path.isabs(project_root):
+    project_root = os.path.abspath(project_root)
+
+agent = DeveloperAgent(project_root=project_root)
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):

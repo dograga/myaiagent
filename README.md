@@ -87,6 +87,8 @@ This application uses **Application Default Credentials (ADC)** for GCP authenti
 
 ## Running the Application
 
+### Backend (FastAPI)
+
 Start the FastAPI server:
 
 ```bash
@@ -94,6 +96,27 @@ uvicorn main:app --reload
 ```
 
 The API will be available at `http://localhost:8000`
+
+### Frontend (React UI)
+
+1. Navigate to the UI directory:
+   ```bash
+   cd ui
+   ```
+
+2. Install dependencies (first time only):
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+The UI will be available at `http://localhost:3000`
+
+**Note:** Both backend and frontend must be running for the full application to work.
 
 ## API Endpoints
 

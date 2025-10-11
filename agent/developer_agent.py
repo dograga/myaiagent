@@ -135,16 +135,24 @@ class DeveloperAgent:
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""
         try:
+            # Try to parse as JSON first
             data = json.loads(input_str)
             file_path = data.get('file_path')
             content = data.get('content')
             if not file_path or content is None:
-                return {"status": "error", "message": "Both 'file_path' and 'content' are required"}
+                return {
+                    "status": "error", 
+                    "message": "Both 'file_path' and 'content' are required. Use format: {\"file_path\": \"path/to/file\", \"content\": \"your content here\"}"
+                }
             return self.file_ops.write_file(file_path, content)
-        except json.JSONDecodeError:
-            return {"status": "error", "message": "Invalid JSON input. Expected format: {\"file_path\": \"path\", \"content\": \"text\"}"}
+        except json.JSONDecodeError as e:
+            # Provide detailed error with example
+            return {
+                "status": "error", 
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST use valid JSON like this example: {{\"file_path\": \"example.py\", \"content\": \"print('hello')\"}}. Make sure to escape quotes in the content."
+            }
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": f"Error writing file: {str(e)}"}
     
     def _append_to_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for append_to_file that parses JSON input."""
@@ -153,12 +161,18 @@ class DeveloperAgent:
             file_path = data.get('file_path')
             content = data.get('content')
             if not file_path or content is None:
-                return {"status": "error", "message": "Both 'file_path' and 'content' are required"}
+                return {
+                    "status": "error", 
+                    "message": "Both 'file_path' and 'content' are required. Use format: {\"file_path\": \"path/to/file\", \"content\": \"text to append\"}"
+                }
             return self.file_ops.append_to_file(file_path, content)
-        except json.JSONDecodeError:
-            return {"status": "error", "message": "Invalid JSON input. Expected format: {\"file_path\": \"path\", \"content\": \"text\"}"}
+        except json.JSONDecodeError as e:
+            return {
+                "status": "error", 
+                "message": f"Invalid JSON format. Error: {str(e)}. You MUST use valid JSON like this example: {{\"file_path\": \"example.py\", \"content\": \"new line\"}}. Make sure to escape quotes in the content."
+            }
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": f"Error appending to file: {str(e)}"}
     
     def _setup_tools(self) -> List[Tool]:
         """Set up the tools for the agent."""
@@ -171,12 +185,12 @@ class DeveloperAgent:
             Tool(
                 name="write_file",
                 func=self._write_file_wrapper,
-                description='Useful for writing content to a file. Input must be a JSON string with format: {"file_path": "path/to/file", "content": "text to write"}'
+                description='Useful for writing content to a file. Input MUST be valid JSON on ONE LINE: {"file_path": "path/to/file", "content": "text to write"}. Example: {"file_path": "test.py", "content": "def hello():\\n    print(\'Hello\')"}'
             ),
             Tool(
                 name="append_to_file",
                 func=self._append_to_file_wrapper,
-                description='Useful for appending content to a file. Input must be a JSON string with format: {"file_path": "path/to/file", "content": "text to append"}'
+                description='Useful for appending content to a file. Input MUST be valid JSON on ONE LINE: {"file_path": "path/to/file", "content": "text to append"}. Example: {"file_path": "test.py", "content": "\\ndef goodbye():\\n    print(\'Bye\')"}'
             ),
             Tool(
                 name="delete_file",
@@ -210,7 +224,7 @@ You MUST use the following format exactly:
 Question: the input question you must answer
 Thought: I will now execute this action
 Action: the action to take, must be one of [{tool_names}]
-Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
+Action Input: the input to the action
 Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: I have completed the requested actions
@@ -221,6 +235,17 @@ CRITICAL RULES:
 - Use tools to make changes, don't just explain what changes to make
 - When user says "go ahead" or "do it", they are confirming you should have already done it
 - Report what you DID, not what you WILL do
+
+JSON FORMAT FOR write_file AND append_to_file:
+For write_file or append_to_file, the Action Input MUST be valid JSON on a single line:
+{{"file_path": "path/to/file.ext", "content": "your content here"}}
+
+EXAMPLES:
+Action: write_file
+Action Input: {{"file_path": "test.py", "content": "def hello():\n    print('Hello')"}}
+
+Action: append_to_file
+Action Input: {{"file_path": "test.py", "content": "\ndef goodbye():\n    print('Bye')"}}
 
 Begin!
 
@@ -245,13 +270,24 @@ You MUST use the following format exactly:
 Question: the input question you must answer
 Thought: think about what to do next
 Action: the action to take, must be one of [{tool_names}]
-Action Input: the input to the action (use proper JSON format for write_file and append_to_file)
+Action Input: the input to the action
 Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: I now know the final answer
 Final Answer: the final answer to the original input question
 
 CRITICAL: Always end with "Final Answer:" followed by your response.
+
+JSON FORMAT FOR write_file AND append_to_file:
+For write_file or append_to_file, the Action Input MUST be valid JSON on a single line:
+{{"file_path": "path/to/file.ext", "content": "your content here"}}
+
+EXAMPLES:
+Action: write_file
+Action Input: {{"file_path": "test.py", "content": "def hello():\n    print('Hello')"}}
+
+Action: append_to_file
+Action Input: {{"file_path": "test.py", "content": "\ndef goodbye():\n    print('Bye')"}}
 
 Begin!
 

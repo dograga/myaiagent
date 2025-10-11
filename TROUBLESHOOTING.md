@@ -2,7 +2,48 @@
 
 ## Common Issues and Solutions
 
-### 1. "Input should be a valid string" Error with List Response
+### 1. Invalid JSON Input Error
+
+**Error:**
+```
+{'status': 'error', 'message': 'Invalid JSON format. Error: ...'}
+```
+
+**Cause:** The agent is not formatting JSON correctly for `write_file` or `append_to_file` operations.
+
+**Solution:** 
+The agent prompt now includes:
+- Explicit JSON format examples
+- Clear error messages with correct format
+- Tool descriptions emphasizing ONE LINE JSON format
+
+**Correct Format:**
+```json
+{"file_path": "test.py", "content": "def hello():\n    print('Hello')"}
+```
+
+**What to Do:**
+1. **Restart the server** to load updated prompts:
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+2. **Create a new session** for clean state:
+   ```bash
+   curl -X POST http://localhost:8000/session/create
+   ```
+
+3. **Be specific in requests:**
+   ```
+   ✅ "Create a file called test.py with a hello function"
+   ❌ "Can you help me with a file?"
+   ```
+
+**See:** `JSON_FORMAT_GUIDE.md` for detailed examples and troubleshooting.
+
+---
+
+### 2. "Input should be a valid string" Error with List Response
 
 **Error:**
 ```

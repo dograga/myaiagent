@@ -131,19 +131,55 @@ class DeveloperAgent:
         
         # Set up the agent
         self.agent = self._create_agent()
+
+    def _safe_parse_json(self, input_str: str) -> Optional[Dict[str, Any]]:
+    #"""Attempt to safely parse a possibly malformed JSON string from the LLM."""
+        try:
+            return json.loads(input_str)
+        except json.JSONDecodeError:
+            # Try repairing common issues
+            cleaned = input_str.strip()
+
+            # Replace real newlines inside strings with escaped ones
+            cleaned = cleaned.replace("\n", "\\n")
+
+            # Sometimes model omits closing braces
+            if not cleaned.endswith("}"):
+                cleaned += "}"
+
+            # Try again
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                # Last resort: extract with regex
+                match = re.search(r'"file_path"\s*:\s*"([^"]+)"', cleaned)
+                content_match = re.search(r'"content"\s*:\s*"(.+)"', cleaned)
+                if match and content_match:
+                    return {"file_path": match.group(1), "content": content_match.group(1)}
+        return None
+
     
     def _write_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for write_file that parses JSON input."""
         try:
             # Try to parse as JSON first
-            data = json.loads(input_str)
-            file_path = data.get('file_path')
-            content = data.get('content')
-            if not file_path or content is None:
+            data = self._safe_parse_json(input_str)
+            if not data:
                 return {
-                    "status": "error", 
-                    "message": "Both 'file_path' and 'content' are required. Use format: {\"file_path\": \"path/to/file\", \"content\": \"your content here\"}"
+                    "status": "error",
+                    "message": f"Invalid JSON format. Could not parse input. "
+                            f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
                 }
+
+            file_path = data.get("file_path")
+            content = data.get("content")
+
+            if not file_path or content is None:
+                return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
+
+            # Normalize escape sequences
+            content = content.replace("\\n", "\n").replace("\\t", "\t")
+
             return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
@@ -185,15 +221,24 @@ class DeveloperAgent:
     def _append_to_file_wrapper(self, input_str: str) -> Dict[str, str]:
         """Wrapper for append_to_file that parses JSON input."""
         try:
-            data = json.loads(input_str)
-            file_path = data.get('file_path')
-            content = data.get('content')
-            if not file_path or content is None:
+            data = self._safe_parse_json(input_str)
+            if not data:
                 return {
-                    "status": "error", 
-                    "message": "Both 'file_path' and 'content' are required. Use format: {\"file_path\": \"path/to/file\", \"content\": \"text to append\"}"
+                    "status": "error",
+                    "message": f"Invalid JSON format. Could not parse input. "
+                            f"Example: {{\"file_path\": \"example.py\", \"content\": \"def hello():\\\\n    print('Hi')\"}}"
                 }
-            return self.file_ops.append_to_file(file_path, content)
+
+            file_path = data.get("file_path")
+            content = data.get("content")
+
+            if not file_path or content is None:
+                return {"status": "error", "message": "Both 'file_path' and 'content' are required."}
+
+            # Normalize escape sequences
+            content = content.replace("\\n", "\n").replace("\\t", "\t")
+
+            return self.file_ops.write_file(file_path, content)
         except json.JSONDecodeError as e:
             # Try to extract file_path and content manually as fallback
             try:

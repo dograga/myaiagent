@@ -50,6 +50,7 @@ class DeveloperAgent:
         # Ensure you've run: gcloud auth application-default login
         gcp_project = os.getenv("GCP_PROJECT_ID")
         gcp_location = os.getenv("GCP_LOCATION", "us-central1")
+        model_name = os.getenv("VERTEX_MODEL_NAME", "text-bison@002")
         
         if not gcp_project:
             raise RuntimeError(
@@ -58,7 +59,7 @@ class DeveloperAgent:
         
         try:
             self.llm = VertexAI(
-                model_name="text-bison@001",
+                model_name=model_name,
                 project=gcp_project,
                 location=gcp_location,
                 max_output_tokens=1024,
@@ -68,9 +69,23 @@ class DeveloperAgent:
                 verbose=True
             )
         except Exception as e:
+            error_msg = str(e)
+            suggestions = []
+            
+            if "404" in error_msg:
+                suggestions.append(f"The model '{model_name}' might not be available in region '{gcp_location}'")
+                suggestions.append(f"Try enabling the API: gcloud services enable aiplatform.googleapis.com --project={gcp_project}")
+                suggestions.append(f"List available models: gcloud ai models list --region={gcp_location}")
+                suggestions.append("Try a different model by setting VERTEX_MODEL_NAME in .env (e.g., text-bison@002, gemini-pro)")
+            elif "403" in error_msg:
+                suggestions.append("Permission denied - check your GCP project permissions")
+                suggestions.append(f"Enable Vertex AI API: gcloud services enable aiplatform.googleapis.com --project={gcp_project}")
+            else:
+                suggestions.append("Make sure you've authenticated with: gcloud auth application-default login")
+            
+            suggestion_text = "\n  - ".join(suggestions)
             raise RuntimeError(
-                f"Failed to initialize VertexAI: {str(e)}\n"
-                f"Make sure you've authenticated with: gcloud auth application-default login"
+                f"Failed to initialize VertexAI: {error_msg}\n\nSuggestions:\n  - {suggestion_text}"
             )
             
         

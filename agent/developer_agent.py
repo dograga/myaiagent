@@ -510,9 +510,11 @@ Question: {input}
             tools=self.tools,
             verbose=True,
             memory=memory,
-            max_iterations=10,
-            early_stopping_method="force",
-            handle_parsing_errors=True
+            max_iterations=20,  # Increased from 10 to handle complex tasks
+            max_execution_time=300,  # 5 minutes timeout
+            early_stopping_method="force",  # Return output even if limit hit
+            handle_parsing_errors=True,
+            return_intermediate_steps=True  # Always return steps for debugging
         )
     
     def run(self, query: str, return_details: bool = False) -> Union[str, Dict[str, Any]]:

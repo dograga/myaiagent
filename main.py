@@ -192,9 +192,31 @@ async def stream_agent_response(
         # Process the query
         # NOTE: agent.run() is synchronous and blocks, but we stream results after
         if show_details:
-            result = agent.run(query, return_details=True)
-            response_text = result.get("output", "")
-            intermediate_steps = result.get("intermediate_steps", [])
+            try:
+                result = agent.run(query, return_details=True)
+                response_text = result.get("output", "")
+                intermediate_steps = result.get("intermediate_steps", [])
+                
+                # Check if agent stopped due to iteration limit
+                # If so, extract whatever output was generated
+                if not response_text and intermediate_steps:
+                    # Agent hit limit but did work - extract last observation
+                    last_action, last_observation = intermediate_steps[-1]
+                    response_text = f"Task partially completed. Last action: {last_action.tool}\nResult: {last_observation}"
+                elif not response_text:
+                    response_text = "Agent completed but no output was generated."
+            except Exception as e:
+                # If agent fails, try to extract intermediate steps
+                error_msg = str(e)
+                response_text = f"Agent encountered an issue: {error_msg}"
+                intermediate_steps = []
+                
+                # Try to get partial results if available
+                try:
+                    if hasattr(agent.agent, 'intermediate_steps'):
+                        intermediate_steps = agent.agent.intermediate_steps
+                except:
+                    pass
             
             # Stream each step as it was executed
             for i, step in enumerate(intermediate_steps):
@@ -255,7 +277,13 @@ async def stream_agent_response(
                 }) + "\n"
                 await asyncio.sleep(0.1)
         else:
-            response = agent.run(query)
+            try:
+                response = agent.run(query)
+                if not response:
+                    response = "Agent completed but no output was generated."
+            except Exception as e:
+                response = f"Agent encountered an issue: {str(e)}"
+            
             yield json.dumps({
                 "type": "developer_result",
                 "response": response
@@ -361,11 +389,28 @@ async def process_query(request: QueryRequest):
         
         # Process the query
         if request.show_details:
-            result = agent.run(request.query, return_details=True)
-            
-            # Extract detailed information
-            response_text = result.get("output", "")
-            intermediate_steps = result.get("intermediate_steps", [])
+            try:
+                result = agent.run(request.query, return_details=True)
+                
+                # Extract detailed information
+                response_text = result.get("output", "")
+                intermediate_steps = result.get("intermediate_steps", [])
+                
+                # Handle iteration limit case
+                if not response_text and intermediate_steps:
+                    last_action, last_observation = intermediate_steps[-1]
+                    response_text = f"Task partially completed. Last action: {last_action.tool}\nResult: {last_observation}"
+                elif not response_text:
+                    response_text = "Agent completed but no output was generated."
+            except Exception as e:
+                # Extract whatever we can from failed execution
+                response_text = f"Agent encountered an issue: {str(e)}"
+                intermediate_steps = []
+                try:
+                    if hasattr(agent.agent, 'intermediate_steps'):
+                        intermediate_steps = agent.agent.intermediate_steps
+                except:
+                    pass
             
             # Format the thought process
             thought_process = []
@@ -378,9 +423,9 @@ async def process_query(request: QueryRequest):
                     "reasoning": action.log
                 })
             
-            # Dev Lead Review
+            # Dev Lead Review - run if enabled, regardless of intermediate_steps
             review_result = None
-            if request.enable_review and intermediate_steps:
+            if request.enable_review:
                 actions_for_review = [
                     {
                         "action": action.tool,

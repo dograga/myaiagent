@@ -173,40 +173,40 @@ async def stream_agent_response(
             "type": "status",
             "message": "🔍 Analyzing requirements..."
         }) + "\n"
-        
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
         
         # Send planning status
         yield json.dumps({
             "type": "status",
             "message": "📋 Creating action plan..."
         }) + "\n"
-        
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
         
         # Send execution status
         yield json.dumps({
             "type": "status",
-            "message": "⚙️ Executing actions..."
+            "message": "⚙️ Executing Developer Agent..."
         }) + "\n"
+        await asyncio.sleep(0.1)
         
-        # Process the query (this runs in the background)
+        # Process the query
+        # NOTE: agent.run() is synchronous and blocks, but we stream results after
         if show_details:
             result = agent.run(query, return_details=True)
             response_text = result.get("output", "")
             intermediate_steps = result.get("intermediate_steps", [])
             
-            # Stream each step
+            # Stream each step as it was executed
             for i, step in enumerate(intermediate_steps):
                 action, observation = step
                 yield json.dumps({
                     "type": "step",
                     "step_number": i + 1,
                     "action": action.tool,
-                    "action_input": action.tool_input,
-                    "observation": str(observation)
+                    "action_input": str(action.tool_input)[:200],  # Truncate long inputs
+                    "observation": str(observation)[:500]  # Truncate long observations
                 }) + "\n"
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.05)  # Small delay for UI to process
             
             # Send developer result
             yield json.dumps({
@@ -222,26 +222,27 @@ async def stream_agent_response(
                     for action, observation in intermediate_steps
                 ]
             }) + "\n"
+            await asyncio.sleep(0.1)
             
-            # Dev Lead Review
-            if enable_review and intermediate_steps:
+            # Dev Lead Review - ALWAYS run if enabled, even with no intermediate steps
+            if enable_review:
                 yield json.dumps({
                     "type": "status",
                     "message": "👔 Dev Lead reviewing changes..."
                 }) + "\n"
-                
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
                 
                 # Prepare review data
                 actions_for_review = [
                     {
                         "action": action.tool,
-                        "action_input": action.tool_input,
-                        "observation": str(observation)
+                        "action_input": str(action.tool_input)[:200],
+                        "observation": str(observation)[:500]
                     }
                     for action, observation in intermediate_steps
-                ]
+                ] if intermediate_steps else []
                 
+                # Run review
                 review_result = dev_lead_agent.review(
                     task=query,
                     actions=actions_for_review,
@@ -252,12 +253,34 @@ async def stream_agent_response(
                     "type": "review",
                     "review": review_result
                 }) + "\n"
+                await asyncio.sleep(0.1)
         else:
             response = agent.run(query)
             yield json.dumps({
                 "type": "developer_result",
                 "response": response
             }) + "\n"
+            await asyncio.sleep(0.1)
+            
+            # Dev Lead Review for non-detailed mode
+            if enable_review:
+                yield json.dumps({
+                    "type": "status",
+                    "message": "👔 Dev Lead reviewing changes..."
+                }) + "\n"
+                await asyncio.sleep(0.1)
+                
+                review_result = dev_lead_agent.review(
+                    task=query,
+                    actions=[],
+                    result=response
+                )
+                
+                yield json.dumps({
+                    "type": "review",
+                    "review": review_result
+                }) + "\n"
+                await asyncio.sleep(0.1)
         
         # Send completion
         yield json.dumps({
@@ -266,9 +289,11 @@ async def stream_agent_response(
         }) + "\n"
         
     except Exception as e:
+        import traceback
         yield json.dumps({
             "type": "error",
-            "message": str(e)
+            "message": str(e),
+            "traceback": traceback.format_exc()
         }) + "\n"
 
 

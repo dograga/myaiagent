@@ -138,22 +138,26 @@ function App() {
             const data = JSON.parse(line)
             
             if (data.type === 'status') {
-              setMessages((prev: Message[]) => [...prev, {
-                role: 'status' as const,
-                content: data.message
-              }])
-            } else if (data.type === 'step') {
+              // Add or update status message
               setMessages((prev: Message[]) => {
-                const lastMsg = prev[prev.length - 1]
-                if (lastMsg && lastMsg.role === 'status') {
-                  return [...prev.slice(0, -1), {
-                    role: 'status' as const,
-                    content: `${data.action}: ${data.action_input.substring(0, 50)}...`
-                  }]
-                }
-                return prev
+                // Remove previous status messages and add new one
+                const filtered = prev.filter((m: Message) => m.role !== 'status')
+                return [...filtered, {
+                  role: 'status' as const,
+                  content: data.message
+                }]
+              })
+            } else if (data.type === 'step') {
+              // Show each step as it happens
+              setMessages((prev: Message[]) => {
+                const filtered = prev.filter((m: Message) => m.role !== 'status')
+                return [...filtered, {
+                  role: 'status' as const,
+                  content: `Step ${data.step_number}: ${data.action} - ${data.action_input.substring(0, 80)}...`
+                }]
               })
             } else if (data.type === 'developer_result') {
+              // Remove status messages and show final result
               setMessages((prev: Message[]) => {
                 const filtered = prev.filter((m: Message) => m.role !== 'status')
                 return [...filtered, {
@@ -163,20 +167,27 @@ function App() {
                 }]
               })
             } else if (data.type === 'review') {
-              setMessages((prev: Message[]) => [...prev, {
-                role: 'review' as const,
-                content: data.review.review || 'Review completed',
-                review: data.review
-              }])
+              // Remove status messages and add review
+              setMessages((prev: Message[]) => {
+                const filtered = prev.filter((m: Message) => m.role !== 'status')
+                return [...filtered, {
+                  role: 'review' as const,
+                  content: data.review.review || 'Review completed',
+                  review: data.review
+                }]
+              })
             } else if (data.type === 'complete') {
               // Remove any remaining status messages
               setMessages((prev: Message[]) => prev.filter((m: Message) => m.role !== 'status'))
             } else if (data.type === 'error') {
               setError(data.message)
-              setMessages((prev: Message[]) => [...prev, {
-                role: 'error' as const,
-                content: data.message
-              }])
+              setMessages((prev: Message[]) => {
+                const filtered = prev.filter((m: Message) => m.role !== 'status')
+                return [...filtered, {
+                  role: 'error' as const,
+                  content: data.message
+                }]
+              })
             }
           } catch (e) {
             console.error('Failed to parse line:', line, e)

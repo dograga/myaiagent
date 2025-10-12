@@ -5,10 +5,20 @@ import './App.css'
 const API_BASE = '/api'
 
 interface Message {
-  role: 'user' | 'assistant' | 'error'
+  role: 'user' | 'assistant' | 'error' | 'status' | 'review'
   content: string
   thought_process?: ThoughtStep[]
+  review?: ReviewResult
   timestamp?: string
+}
+
+interface ReviewResult {
+  status: string
+  review: string
+  decision: string
+  issues?: string[]
+  suggestions?: string[]
+  comments?: string[]
 }
 
 interface ThoughtStep {
@@ -23,6 +33,7 @@ interface QueryResponse {
   session_id: string
   response: string
   thought_process?: ThoughtStep[]
+  review?: ReviewResult
   message_count: number
 }
 
@@ -44,6 +55,8 @@ function App() {
   const [input, setInput] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
   const [showDetails, setShowDetails] = useState<boolean>(true)
+  const [enableReview, setEnableReview] = useState<boolean>(true)
+  const [useStreaming, setUseStreaming] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -81,35 +94,149 @@ function App() {
     }
   }
 
+  const sendMessageStreaming = async (query: string) => {
+    try {
+      const response = await fetch(`${API_BASE}/query/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          session_id: sessionId,
+          show_details: showDetails,
+          enable_review: enableReview
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Stream request failed')
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No reader available')
+      }
+
+      let buffer = ''
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) break
+        
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        
+        for (const line of lines) {
+          if (!line.trim()) continue
+          
+          try {
+            const data = JSON.parse(line)
+            
+            if (data.type === 'status') {
+              setMessages((prev: Message[]) => [...prev, {
+                role: 'status' as const,
+                content: data.message
+              }])
+            } else if (data.type === 'step') {
+              setMessages((prev: Message[]) => {
+                const lastMsg = prev[prev.length - 1]
+                if (lastMsg && lastMsg.role === 'status') {
+                  return [...prev.slice(0, -1), {
+                    role: 'status' as const,
+                    content: `${data.action}: ${data.action_input.substring(0, 50)}...`
+                  }]
+                }
+                return prev
+              })
+            } else if (data.type === 'developer_result') {
+              setMessages((prev: Message[]) => {
+                const filtered = prev.filter((m: Message) => m.role !== 'status')
+                return [...filtered, {
+                  role: 'assistant' as const,
+                  content: data.response,
+                  thought_process: data.thought_process
+                }]
+              })
+            } else if (data.type === 'review') {
+              setMessages((prev: Message[]) => [...prev, {
+                role: 'review' as const,
+                content: data.review.review || 'Review completed',
+                review: data.review
+              }])
+            } else if (data.type === 'complete') {
+              // Remove any remaining status messages
+              setMessages((prev: Message[]) => prev.filter((m: Message) => m.role !== 'status'))
+            } else if (data.type === 'error') {
+              setError(data.message)
+              setMessages((prev: Message[]) => [...prev, {
+                role: 'error' as const,
+                content: data.message
+              }])
+            }
+          } catch (e) {
+            console.error('Failed to parse line:', line, e)
+          }
+        }
+      }
+    } catch (err) {
+      const error = err as Error
+      setError('Streaming error: ' + error.message)
+      setMessages(prev => [...prev, {
+        role: 'error',
+        content: error.message
+      }])
+    }
+  }
+
   const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!input.trim() || !sessionId) return
 
     const userMessage: Message = { role: 'user', content: input }
-    setMessages(prev => [...prev, userMessage])
+    const query = input
+    setMessages((prev: Message[]) => [...prev, userMessage])
     setInput('')
     setLoading(true)
     setError(null)
 
     try {
-      const response = await axios.post<QueryResponse>(`${API_BASE}/query`, {
-        query: input,
-        session_id: sessionId,
-        show_details: showDetails
-      })
+      if (useStreaming) {
+        await sendMessageStreaming(query)
+      } else {
+        const response = await axios.post<QueryResponse>(`${API_BASE}/query`, {
+          query,
+          session_id: sessionId,
+          show_details: showDetails,
+          enable_review: enableReview
+        })
 
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: response.data.response,
-        thought_process: response.data.thought_process
+        const assistantMessage: Message = {
+          role: 'assistant',
+          content: response.data.response,
+          thought_process: response.data.thought_process,
+          review: response.data.review
+        }
+
+        setMessages((prev: Message[]) => [...prev, assistantMessage])
+        
+        if (response.data.review) {
+          setMessages((prev: Message[]) => [...prev, {
+            role: 'review',
+            content: response.data.review?.review || 'Review completed',
+            review: response.data.review
+          }])
+        }
       }
-
-      setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
       const error = err as AxiosError<{ detail: string }>
       const errorMessage = error.response?.data?.detail || error.message
       setError('Error: ' + errorMessage)
-      setMessages(prev => [...prev, {
+      setMessages((prev: Message[]) => [...prev, {
         role: 'error',
         content: errorMessage
       }])
@@ -165,6 +292,22 @@ function App() {
           />
           <span>Show Thought Process</span>
         </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={enableReview}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setEnableReview(e.target.checked)}
+          />
+          <span>👔 Dev Lead Review</span>
+        </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={useStreaming}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setUseStreaming(e.target.checked)}
+          />
+          <span>⚡ Streaming</span>
+        </label>
       </div>
 
       {error && (
@@ -192,11 +335,55 @@ function App() {
           {messages.map((msg, idx) => (
             <div key={idx} className={`message ${msg.role}`}>
               <div className="message-header">
-                <strong>{msg.role === 'user' ? '👤 You' : msg.role === 'error' ? '❌ Error' : '🤖 Assistant'}</strong>
+                <strong>
+                  {msg.role === 'user' ? '👤 You' : 
+                   msg.role === 'error' ? '❌ Error' : 
+                   msg.role === 'status' ? '⚙️ Status' :
+                   msg.role === 'review' ? '👔 Dev Lead Review' :
+                   '🤖 Assistant'}
+                </strong>
               </div>
               <div className="message-content">
                 {msg.content}
               </div>
+              
+              {msg.review && (
+                <div className="review-details">
+                  <div className={`review-decision ${msg.review.decision}`}>
+                    <strong>Decision:</strong> {msg.review.decision.toUpperCase()}
+                  </div>
+                  {msg.review.issues && msg.review.issues.length > 0 && (
+                    <div className="review-issues">
+                      <strong>Issues:</strong>
+                      <ul>
+                        {msg.review.issues.map((issue, i) => (
+                          <li key={i}>{issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {msg.review.suggestions && msg.review.suggestions.length > 0 && (
+                    <div className="review-suggestions">
+                      <strong>Suggestions:</strong>
+                      <ul>
+                        {msg.review.suggestions.map((suggestion, i) => (
+                          <li key={i}>{suggestion}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {msg.review.comments && msg.review.comments.length > 0 && (
+                    <div className="review-comments">
+                      <strong>Comments:</strong>
+                      <ul>
+                        {msg.review.comments.map((comment, i) => (
+                          <li key={i}>{comment}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               
               {msg.thought_process && showDetails && (
                 <details className="thought-process">

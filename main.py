@@ -1,10 +1,14 @@
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncGenerator
 import os
+import json
+import asyncio
 from dotenv import load_dotenv
 from agent.developer_agent import DeveloperAgent
+from agent.dev_lead_agent import DevLeadAgent
 from session_manager import SessionManager
 
 # Load environment variables
@@ -30,12 +34,15 @@ if not os.path.isabs(project_root):
 auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
 
 agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
+dev_lead_agent = DevLeadAgent()
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     show_details: bool = True
+    enable_review: bool = True  # Enable Dev Lead review
+    stream: bool = False  # Enable streaming
 
 @app.get("/health")
 async def health_check():
@@ -153,6 +160,151 @@ async def list_sessions():
         "sessions": session_manager.list_sessions()
     }
 
+async def stream_agent_response(
+    query: str,
+    session_id: str,
+    show_details: bool,
+    enable_review: bool
+) -> AsyncGenerator[str, None]:
+    """Stream the agent's response with progress updates."""
+    try:
+        # Send initial status
+        yield json.dumps({
+            "type": "status",
+            "message": "🔍 Analyzing requirements..."
+        }) + "\n"
+        
+        await asyncio.sleep(0.5)
+        
+        # Send planning status
+        yield json.dumps({
+            "type": "status",
+            "message": "📋 Creating action plan..."
+        }) + "\n"
+        
+        await asyncio.sleep(0.5)
+        
+        # Send execution status
+        yield json.dumps({
+            "type": "status",
+            "message": "⚙️ Executing actions..."
+        }) + "\n"
+        
+        # Process the query (this runs in the background)
+        if show_details:
+            result = agent.run(query, return_details=True)
+            response_text = result.get("output", "")
+            intermediate_steps = result.get("intermediate_steps", [])
+            
+            # Stream each step
+            for i, step in enumerate(intermediate_steps):
+                action, observation = step
+                yield json.dumps({
+                    "type": "step",
+                    "step_number": i + 1,
+                    "action": action.tool,
+                    "action_input": action.tool_input,
+                    "observation": str(observation)
+                }) + "\n"
+                await asyncio.sleep(0.1)
+            
+            # Send developer result
+            yield json.dumps({
+                "type": "developer_result",
+                "response": response_text,
+                "thought_process": [
+                    {
+                        "action": action.tool,
+                        "action_input": action.tool_input,
+                        "observation": str(observation),
+                        "reasoning": action.log
+                    }
+                    for action, observation in intermediate_steps
+                ]
+            }) + "\n"
+            
+            # Dev Lead Review
+            if enable_review and intermediate_steps:
+                yield json.dumps({
+                    "type": "status",
+                    "message": "👔 Dev Lead reviewing changes..."
+                }) + "\n"
+                
+                await asyncio.sleep(0.5)
+                
+                # Prepare review data
+                actions_for_review = [
+                    {
+                        "action": action.tool,
+                        "action_input": action.tool_input,
+                        "observation": str(observation)
+                    }
+                    for action, observation in intermediate_steps
+                ]
+                
+                review_result = dev_lead_agent.review(
+                    task=query,
+                    actions=actions_for_review,
+                    result=response_text
+                )
+                
+                yield json.dumps({
+                    "type": "review",
+                    "review": review_result
+                }) + "\n"
+        else:
+            response = agent.run(query)
+            yield json.dumps({
+                "type": "developer_result",
+                "response": response
+            }) + "\n"
+        
+        # Send completion
+        yield json.dumps({
+            "type": "complete",
+            "message": "✅ Task completed"
+        }) + "\n"
+        
+    except Exception as e:
+        yield json.dumps({
+            "type": "error",
+            "message": str(e)
+        }) + "\n"
+
+
+@app.post("/query/stream")
+async def process_query_stream(request: QueryRequest):
+    """
+    Stream the agent's response with real-time updates.
+    """
+    try:
+        # Get or create session
+        session_id = request.session_id
+        if session_id:
+            session = session_manager.get_session(session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="Session not found or expired")
+        else:
+            session_id = session_manager.create_session()
+            session = session_manager.get_session(session_id)
+        
+        # Add user message to history
+        session.add_message("user", request.query)
+        
+        return StreamingResponse(
+            stream_agent_response(
+                request.query,
+                session_id,
+                request.show_details,
+                request.enable_review
+            ),
+            media_type="application/x-ndjson"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/query")
 async def process_query(request: QueryRequest):
     """
@@ -161,7 +313,12 @@ async def process_query(request: QueryRequest):
     
     If session_id is provided, the conversation history will be maintained.
     If show_details is True, the response will include the agent's thought process.
+    If enable_review is True, the Dev Lead will review the changes.
+    If stream is True, use /query/stream endpoint instead.
     """
+    if request.stream:
+        return await process_query_stream(request)
+    
     try:
         # Get or create session
         session_id = request.session_id
@@ -196,16 +353,39 @@ async def process_query(request: QueryRequest):
                     "reasoning": action.log
                 })
             
+            # Dev Lead Review
+            review_result = None
+            if request.enable_review and intermediate_steps:
+                actions_for_review = [
+                    {
+                        "action": action.tool,
+                        "action_input": action.tool_input,
+                        "observation": str(observation)
+                    }
+                    for action, observation in intermediate_steps
+                ]
+                
+                review_result = dev_lead_agent.review(
+                    task=request.query,
+                    actions=actions_for_review,
+                    result=response_text
+                )
+            
             # Add assistant response to history
             session.add_message("assistant", response_text)
             
-            return {
+            response_data = {
                 "status": "success",
                 "session_id": session_id,
                 "response": response_text,
                 "thought_process": thought_process,
                 "message_count": len(session.messages)
             }
+            
+            if review_result:
+                response_data["review"] = review_result
+            
+            return response_data
         else:
             response = agent.run(request.query)
             session.add_message("assistant", response)

@@ -44,6 +44,15 @@ class QueryRequest(BaseModel):
     enable_review: bool = True  # Enable Dev Lead review
     stream: bool = False  # Enable streaming
 
+class SettingsRequest(BaseModel):
+    project_root: Optional[str] = None
+    model_name: Optional[str] = None
+
+class SettingsResponse(BaseModel):
+    project_root: str
+    model_name: str
+    available_models: List[str]
+
 @app.get("/health")
 async def health_check():
     """Check if the service is properly configured and ready."""
@@ -481,6 +490,121 @@ async def process_query(request: QueryRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Error processing query: {str(e)}"
+        )
+
+@app.get("/settings", response_model=SettingsResponse)
+async def get_settings():
+    """Get current settings."""
+    return SettingsResponse(
+        project_root=agent.project_root,
+        model_name=os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp"),
+        available_models=[
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
+        ]
+    )
+
+@app.post("/settings")
+async def update_settings(settings: SettingsRequest):
+    """Update settings and reinitialize agents."""
+    global agent, dev_lead_agent
+    
+    try:
+        # Update project root if provided
+        if settings.project_root:
+            if not os.path.exists(settings.project_root):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Project root path does not exist: {settings.project_root}"
+                )
+            if not os.path.isabs(settings.project_root):
+                settings.project_root = os.path.abspath(settings.project_root)
+            
+            # Update environment variable
+            os.environ["PROJECT_ROOT"] = settings.project_root
+            
+            # Reinitialize developer agent with new project root
+            auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
+            agent = DeveloperAgent(project_root=settings.project_root, auto_approve=auto_approve)
+        
+        # Update model name if provided
+        if settings.model_name:
+            valid_models = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]
+            if settings.model_name not in valid_models:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid model name. Must be one of: {', '.join(valid_models)}"
+                )
+            
+            # Update environment variable
+            os.environ["VERTEX_MODEL_NAME"] = settings.model_name
+            
+            # Reinitialize both agents with new model
+            auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
+            project_root = os.getenv("PROJECT_ROOT", os.getcwd())
+            if not os.path.isabs(project_root):
+                project_root = os.path.abspath(project_root)
+            
+            agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
+            dev_lead_agent = DevLeadAgent()
+        
+        return {
+            "status": "success",
+            "message": "Settings updated successfully",
+            "project_root": agent.project_root,
+            "model_name": os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating settings: {str(e)}"
+        )
+
+@app.get("/browse-directory")
+async def browse_directory(path: Optional[str] = None):
+    """Browse directories for project root selection."""
+    try:
+        # Default to user's home directory if no path provided
+        if not path:
+            path = os.path.expanduser("~")
+        
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="Path does not exist")
+        
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail="Path is not a directory")
+        
+        # Get parent directory
+        parent = os.path.dirname(path) if path != os.path.dirname(path) else None
+        
+        # List directories
+        items = []
+        try:
+            for item in sorted(os.listdir(path)):
+                item_path = os.path.join(path, item)
+                if os.path.isdir(item_path):
+                    items.append({
+                        "name": item,
+                        "path": item_path,
+                        "type": "directory"
+                    })
+        except PermissionError:
+            pass
+        
+        return {
+            "current_path": path,
+            "parent_path": parent,
+            "items": items
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error browsing directory: {str(e)}"
         )
 
 if __name__ == "__main__":

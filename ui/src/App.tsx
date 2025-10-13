@@ -49,6 +49,24 @@ interface HistoryResponse {
   messages: Message[]
 }
 
+interface SettingsResponse {
+  project_root: string
+  model_name: string
+  available_models: string[]
+}
+
+interface DirectoryItem {
+  name: string
+  path: string
+  type: string
+}
+
+interface BrowseResponse {
+  current_path: string
+  parent_path: string | null
+  items: DirectoryItem[]
+}
+
 function App() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -58,6 +76,17 @@ function App() {
   const [enableReview, setEnableReview] = useState<boolean>(true)
   const [useStreaming, setUseStreaming] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [projectRoot, setProjectRoot] = useState<string>('')
+  const [modelName, setModelName] = useState<string>('gemini-2.0-flash-exp')
+  const [availableModels, setAvailableModels] = useState<string[]>([
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
+  ])
+  const [showBrowser, setShowBrowser] = useState<boolean>(false)
+  const [currentPath, setCurrentPath] = useState<string>('')
+  const [parentPath, setParentPath] = useState<string | null>(null)
+  const [directories, setDirectories] = useState<DirectoryItem[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -70,6 +99,7 @@ function App() {
 
   useEffect(() => {
     createSession()
+    loadSettings()
   }, [])
 
   const createSession = async () => {
@@ -268,6 +298,50 @@ function App() {
     }
   }
 
+  const loadSettings = async () => {
+    try {
+      const response = await axios.get<SettingsResponse>(`${API_BASE}/settings`)
+      setProjectRoot(response.data.project_root)
+      setModelName(response.data.model_name)
+      setAvailableModels(response.data.available_models)
+    } catch (err) {
+      console.error('Failed to load settings:', err)
+    }
+  }
+
+  const saveSettings = async () => {
+    try {
+      await axios.post(`${API_BASE}/settings`, {
+        project_root: projectRoot,
+        model_name: modelName
+      })
+      setError(null)
+      alert('Settings saved successfully! Agents have been reinitialized.')
+    } catch (err) {
+      const error = err as AxiosError<{ detail: string }>
+      setError('Failed to save settings: ' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const browseDirectory = async (path?: string) => {
+    try {
+      const url = path ? `${API_BASE}/browse-directory?path=${encodeURIComponent(path)}` : `${API_BASE}/browse-directory`
+      const response = await axios.get<BrowseResponse>(url)
+      setCurrentPath(response.data.current_path)
+      setParentPath(response.data.parent_path)
+      setDirectories(response.data.items)
+      setShowBrowser(true)
+    } catch (err) {
+      const error = err as AxiosError<{ detail: string }>
+      setError('Failed to browse directory: ' + (error.response?.data?.detail || error.message))
+    }
+  }
+
+  const selectDirectory = (path: string) => {
+    setProjectRoot(path)
+    setShowBrowser(false)
+  }
+
   const newSession = async () => {
     setMessages([])
     setError(null)
@@ -285,49 +359,146 @@ function App() {
         </div>
       </header>
 
-      <div className="controls">
-        <button onClick={newSession} className="btn btn-secondary">
-          New Session
-        </button>
-        <button onClick={clearHistory} className="btn btn-secondary">
-          Clear History
-        </button>
-        <button onClick={loadHistory} className="btn btn-secondary">
-          Reload History
-        </button>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={showDetails}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setShowDetails(e.target.checked)}
-          />
-          <span>Show Thought Process</span>
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={enableReview}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setEnableReview(e.target.checked)}
-          />
-          <span>👔 Dev Lead Review</span>
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={useStreaming}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setUseStreaming(e.target.checked)}
-          />
-          <span>⚡ Streaming</span>
-        </label>
-      </div>
+      <div className="main-layout">
+        {/* Left Sidebar - Session & Settings */}
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <h3>📋 Session</h3>
+            <div className="sidebar-buttons">
+              <button onClick={newSession} className="btn btn-secondary btn-full">
+                New Session
+              </button>
+              <button onClick={clearHistory} className="btn btn-secondary btn-full">
+                Clear History
+              </button>
+              <button onClick={loadHistory} className="btn btn-secondary btn-full">
+                Reload History
+              </button>
+            </div>
+          </div>
 
-      {error && (
-        <div className="error-banner">
-          {error}
+          <div className="sidebar-section">
+            <h3>⚙️ Settings</h3>
+            
+            <div className="setting-group">
+              <label>Model:</label>
+              <select 
+                value={modelName} 
+                onChange={(e) => setModelName(e.target.value)}
+                className="setting-select"
+              >
+                {availableModels.map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="setting-group">
+              <label>Project Root:</label>
+              <div className="path-input-group-vertical">
+                <input 
+                  type="text" 
+                  value={projectRoot} 
+                  onChange={(e) => setProjectRoot(e.target.value)}
+                  className="setting-input"
+                  placeholder="/path/to/project"
+                />
+                <button onClick={() => browseDirectory()} className="btn btn-secondary btn-full">
+                  📁 Browse
+                </button>
+              </div>
+            </div>
+
+            <div className="sidebar-toggles">
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={showDetails}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setShowDetails(e.target.checked)}
+                />
+                <span>Show Thought Process</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={enableReview}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEnableReview(e.target.checked)}
+                />
+                <span>👔 Dev Lead Review</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={useStreaming}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setUseStreaming(e.target.checked)}
+                />
+                <span>⚡ Streaming</span>
+              </label>
+            </div>
+
+            <div className="setting-actions">
+              <button onClick={saveSettings} className="btn btn-primary btn-full">
+                💾 Save Settings
+              </button>
+            </div>
+          </div>
+        </aside>
+
+      {showBrowser && (
+        <div className="directory-browser">
+          <div className="browser-header">
+            <h3>📁 Browse Directory</h3>
+            <button onClick={() => setShowBrowser(false)} className="btn-close">✕</button>
+          </div>
+          
+          <div className="current-path">
+            <strong>Current:</strong> {currentPath}
+          </div>
+
+          <div className="directory-list">
+            {parentPath && (
+              <div 
+                className="directory-item parent" 
+                onClick={() => browseDirectory(parentPath)}
+              >
+                <span>📁 ..</span>
+              </div>
+            )}
+            
+            {directories.map((dir) => (
+              <div 
+                key={dir.path} 
+                className="directory-item"
+                onDoubleClick={() => browseDirectory(dir.path)}
+              >
+                <span>📁 {dir.name}</span>
+                <button 
+                  onClick={() => selectDirectory(dir.path)}
+                  className="btn btn-small"
+                >
+                  Select
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="browser-actions">
+            <button onClick={() => selectDirectory(currentPath)} className="btn btn-primary">
+              Select Current Directory
+            </button>
+          </div>
         </div>
       )}
 
-      <div className="chat-container">
+        {/* Right Main Area - Chat */}
+        <main className="main-content">
+          {error && (
+            <div className="error-banner">
+              {error}
+            </div>
+          )}
+
+          <div className="chat-container">
         <div className="messages">
           {messages.length === 0 && (
             <div className="welcome">
@@ -348,10 +519,10 @@ function App() {
               <div className="message-header">
                 <strong>
                   {msg.role === 'user' ? '👤 You' : 
-                   msg.role === 'error' ? '❌ Error' : 
-                   msg.role === 'status' ? '⚙️ Status' :
-                   msg.role === 'review' ? '👔 Dev Lead Review' :
-                   '🤖 Assistant'}
+                    msg.role === 'error' ? '❌ Error' : 
+                    msg.role === 'status' ? '⚙️ Status' :
+                    msg.role === 'review' ? '👔 Dev Lead Review' :
+                    '🤖 Assistant'}
                 </strong>
               </div>
               <div className="message-content">
@@ -434,13 +605,22 @@ function App() {
         </div>
 
         <form onSubmit={sendMessage} className="input-form">
-          <input
-            type="text"
+          <textarea
             value={input}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
-            placeholder="Ask me to help with your code..."
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+            placeholder="Ask me to help with your code...\n\nPress Shift+Enter to send, Enter for new line."
             disabled={loading || !sessionId}
             className="input-field"
+            rows={3}
+            onKeyDown={(e) => {
+              // Submit on Shift+Enter (Enter alone = new line)
+              if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault()
+                if (!loading && sessionId && input.trim()) {
+                  sendMessage(e as any)
+                }
+              }
+            }}
           />
           <button 
             type="submit" 
@@ -450,6 +630,8 @@ function App() {
             {loading ? 'Sending...' : 'Send'}
           </button>
         </form>
+          </div>
+        </main>
       </div>
     </div>
   )

@@ -1,11 +1,11 @@
+/* app.css */
 .app {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 1200px;
+  max-width: 100%;
   margin: 0 auto;
   background: white;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
 .header {
@@ -37,14 +37,58 @@
   font-family: monospace;
 }
 
-.controls {
+/* Main Layout - Two Column */
+.main-layout {
   display: flex;
-  gap: 10px;
-  padding: 15px 30px;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left Sidebar */
+.sidebar {
+  width: 300px;
   background: #f8f9fa;
-  border-bottom: 1px solid #e0e0e0;
-  flex-wrap: wrap;
-  align-items: center;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sidebar-section h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #667eea;
+  font-weight: 600;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+}
+
+.sidebar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Main Content Area */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .btn {
@@ -55,6 +99,11 @@
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s;
+}
+
+.btn-full {
+  width: 100%;
+  text-align: center;
 }
 
 .btn:disabled {
@@ -88,7 +137,7 @@
   gap: 8px;
   cursor: pointer;
   user-select: none;
-  margin-left: auto;
+  font-size: 14px;
 }
 
 .toggle input {
@@ -98,9 +147,10 @@
 .error-banner {
   background: #fee;
   color: #c33;
-  padding: 12px 30px;
+  padding: 12px 20px;
   border-left: 4px solid #c33;
   margin: 0;
+  flex-shrink: 0;
 }
 
 .chat-container {
@@ -108,6 +158,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: white;
 }
 
 .messages {
@@ -284,6 +335,7 @@
   padding: 20px 30px;
   background: white;
   border-top: 1px solid #e0e0e0;
+  align-items: flex-end;
 }
 
 .input-field {
@@ -293,19 +345,18 @@
   border-radius: 8px;
   font-size: 14px;
   transition: border-color 0.2s;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 200px;
 }
 
 .input-field:focus {
   outline: none;
   border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.input-field:disabled {
-  background: #f5f5f5;
-  cursor: not-allowed;
-}
-
-/* Scrollbar styling */
 .messages::-webkit-scrollbar {
   width: 8px;
 }
@@ -323,10 +374,34 @@
   background: #555;
 }
 
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 /* Responsive */
-@media (max-width: 768px) {
-  .app {
-    max-width: 100%;
+@media (max-width: 968px) {
+  .main-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
   }
 
   .header {
@@ -335,10 +410,6 @@
 
   .header h1 {
     font-size: 20px;
-  }
-
-  .controls {
-    padding: 10px 20px;
   }
 
   .messages {
@@ -352,4 +423,177 @@
   .input-form {
     padding: 15px 20px;
   }
+}
+
+.setting-group {
+  margin-bottom: 15px;
+}
+
+.setting-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+  font-size: 13px;
+}
+
+.setting-group small {
+  display: block;
+  color: #666;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.setting-select,
+.setting-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.setting-select:focus,
+.setting-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.path-input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.path-input-group input {
+  flex: 1;
+}
+
+.path-input-group-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+/* Directory Browser */
+.directory-browser {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+}
+
+.browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+}
+
+.browser-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.btn-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.btn-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.current-path {
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 13px;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.directory-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.directory-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  margin: 5px 0;
+  background: #f8f9fa;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.directory-item:hover {
+  background: #e9ecef;
+  transform: translateX(5px);
+}
+
+.directory-item.parent {
+  background: #e3f2fd;
+  font-weight: 600;
+}
+
+.directory-item span {
+  flex: 1;
+  font-size: 14px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-small:hover {
+  background: #5568d3;
+}
+
+.browser-actions {
+  padding: 15px 20px;
+  border-top: 1px solid #e0e0e0;
+  background: #f8f9fa;
+  border-radius: 0 0 12px 12px;
 }

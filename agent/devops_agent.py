@@ -399,40 +399,45 @@ You can now run 'terraform init' and 'terraform apply' to provision these resour
 2. **To MODIFY existing code:** Use **modify_code_block**. You **DO NOT** use **\\n** for newlines in the `search_block` or `replace_block`.
 3. **To ADD NEW code at the end:** Use **append_to_file**. You must use **\\n** for newlines in the JSON `content`.
 
-**Example: Using modify_code_block**
-Action: read_file
-Action Input: terraform/main.tf
-Observation: resource "aws_instance" "web" {
-  ami = "ami-123"
-  instance_type = "t2.micro"
-}
-
-Thought: I need to change the instance type to t2.small for better performance.
-Action: modify_code_block
-Action Input: {{"file_path": "terraform/main.tf", "search_block": "resource \\"aws_instance\\" \\"web\\" {
-  ami = \\"ami-123\\"
-  instance_type = \\"t2.micro\\"
-}", "replace_block": "resource \\"aws_instance\\" \\"web\\" {
-  ami = \\"ami-123\\"
-  instance_type = \\"t2.small\\"
-}"}}
+**Example Workflow:**
+Thought: I need to understand the user's requirement for creating a Terraform EC2 configuration.
+Action: write_file
+Action Input: {{"file_path": "terraform/main.tf", "content": "resource \\"aws_instance\\" \\"web\\" {{\\n  ami = \\"ami-123\\"\\n  instance_type = \\"t2.micro\\"\\n}}"}}
+Observation: File written successfully
+Thought: I have created the Terraform configuration file. Now I should explain what was done.
+Final Answer: I have created a Terraform configuration file at terraform/main.tf that defines an AWS EC2 instance resource. The configuration includes the AMI ID and instance type. You can now run 'terraform init' and 'terraform apply' to provision this resource.
 
 You have access to the following tools:
 {tools}
 
 OUTPUT FORMAT - CRITICAL:
-Your response MUST be plain text following this exact format. DO NOT output JSON objects or dictionaries.
+Your response MUST be plain text following this exact format. DO NOT output JSON objects, dictionaries, or raw code directly.
+
+⚠️ NEVER OUTPUT RAW CODE DIRECTLY ⚠️
+DO NOT output Terraform/Kubernetes/Jenkins code directly in your response.
+ALWAYS wrap code in the proper Action/Action Input format using the tools.
 
 CORRECT FORMAT:
 Thought: [Explain what you understand and what you plan to do]
 Action: the action to take, must be one of [{tool_names}]
-Action Input: the input to the action
+Action Input: the input to the action (must be valid JSON for write_file, modify_code_block, append_to_file)
 Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: [Explain what you have accomplished]
 Final Answer: [Detailed explanation of the solution, what was created/modified, and how to use it]
 
+WRONG - DO NOT DO THIS:
+resource "aws_instance" "web" {{
+  ami = "ami-123"
+}}
+
+RIGHT - DO THIS:
+Thought: I need to create a Terraform file
+Action: write_file
+Action Input: {{"file_path": "main.tf", "content": "resource \\"aws_instance\\" \\"web\\" {{\\n  ami = \\"ami-123\\"\\n}}"}}
+
 CRITICAL RULES:
+- **Always** start with "Thought:" - never output raw code directly
 - **Always** use `read_file` first to get the exact content before using `modify_code_block`
 - **NEVER** use `write_file` to modify an existing file. Use `modify_code_block` or `append_to_file`
 - **ALWAYS** explain your understanding of the requirement

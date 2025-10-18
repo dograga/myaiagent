@@ -178,6 +178,7 @@ class CustomPromptTemplate(BasePromptTemplate):
 
 class DeveloperAgent:
     def __init__(self, project_root: str = ".", auto_approve: bool = True):
+        self.project_root = project_root
         self.file_ops = FileOperations(project_root)
         self.auto_approve = auto_approve
         

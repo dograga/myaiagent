@@ -37,6 +37,16 @@
   font-family: monospace;
 }
 
+.controls {
+  display: flex;
+  gap: 15px;
+  padding: 15px 30px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 /* Main Layout - Two Column */
 .main-layout {
   display: flex;
@@ -142,6 +152,41 @@
 
 .toggle input {
   cursor: pointer;
+}
+
+.agent-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agent-selector label {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.agent-select {
+  padding: 8px 12px;
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.agent-select:hover {
+  background: #f0f2ff;
+}
+
+.agent-select:focus {
+  outline: none;
+  border-color: #5568d3;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .error-banner {

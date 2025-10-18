@@ -9,6 +9,8 @@ import asyncio
 from dotenv import load_dotenv
 from agent.developer_agent import DeveloperAgent
 from agent.dev_lead_agent import DevLeadAgent
+from agent.devops_agent import DevOpsAgent
+from agent.devops_lead_agent import DevOpsLeadAgent
 from session_manager import SessionManager
 
 # Load environment variables
@@ -33,16 +35,20 @@ if not os.path.isabs(project_root):
 # Get auto-approve setting from environment (default: True)
 auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
 
-agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
+# Initialize both developer and devops agents
+developer_agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
 dev_lead_agent = DevLeadAgent()
+devops_agent = DevOpsAgent(project_root=project_root, auto_approve=auto_approve)
+devops_lead_agent = DevOpsLeadAgent()
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     show_details: bool = True
-    enable_review: bool = True  # Enable Dev Lead review
+    enable_review: bool = True  # Enable Lead review
     stream: bool = False  # Enable streaming
+    agent_type: str = "developer"  # "developer" or "devops"
 
 class SettingsRequest(BaseModel):
     project_root: Optional[str] = None
@@ -173,7 +179,8 @@ async def stream_agent_response(
     query: str,
     session_id: str,
     show_details: bool,
-    enable_review: bool
+    enable_review: bool,
+    agent_type: str = "developer"
 ) -> AsyncGenerator[str, None]:
     """Stream the agent's response with progress updates."""
     try:
@@ -191,10 +198,22 @@ async def stream_agent_response(
         }) + "\n"
         await asyncio.sleep(0.1)
         
+        # Select the appropriate agent and lead
+        if agent_type == "devops":
+            agent = devops_agent
+            lead_agent = devops_lead_agent
+            agent_name = "DevOps Agent"
+            lead_name = "DevOps Lead"
+        else:
+            agent = developer_agent
+            lead_agent = dev_lead_agent
+            agent_name = "Developer Agent"
+            lead_name = "Dev Lead"
+        
         # Send execution status
         yield json.dumps({
             "type": "status",
-            "message": "⚙️ Executing Developer Agent..."
+            "message": f"⚙️ Executing {agent_name}..."
         }) + "\n"
         await asyncio.sleep(0.1)
         
@@ -255,11 +274,11 @@ async def stream_agent_response(
             }) + "\n"
             await asyncio.sleep(0.1)
             
-            # Dev Lead Review - ALWAYS run if enabled, even with no intermediate steps
+            # Lead Review - ALWAYS run if enabled, even with no intermediate steps
             if enable_review:
                 yield json.dumps({
                     "type": "status",
-                    "message": "👔 Dev Lead reviewing changes..."
+                    "message": f"👔 {lead_name} reviewing changes..."
                 }) + "\n"
                 await asyncio.sleep(0.1)
                 
@@ -274,7 +293,7 @@ async def stream_agent_response(
                 ] if intermediate_steps else []
                 
                 # Run review
-                review_result = dev_lead_agent.review(
+                review_result = lead_agent.review(
                     task=query,
                     actions=actions_for_review,
                     result=response_text
@@ -299,15 +318,15 @@ async def stream_agent_response(
             }) + "\n"
             await asyncio.sleep(0.1)
             
-            # Dev Lead Review for non-detailed mode
+            # Lead Review for non-detailed mode
             if enable_review:
                 yield json.dumps({
                     "type": "status",
-                    "message": "👔 Dev Lead reviewing changes..."
+                    "message": f"👔 {lead_name} reviewing changes..."
                 }) + "\n"
                 await asyncio.sleep(0.1)
                 
-                review_result = dev_lead_agent.review(
+                review_result = lead_agent.review(
                     task=query,
                     actions=[],
                     result=response
@@ -358,7 +377,8 @@ async def process_query_stream(request: QueryRequest):
                 request.query,
                 session_id,
                 request.show_details,
-                request.enable_review
+                request.enable_review,
+                request.agent_type
             ),
             media_type="application/x-ndjson"
         )
@@ -396,6 +416,14 @@ async def process_query(request: QueryRequest):
         # Add user message to history
         session.add_message("user", request.query)
         
+        # Select the appropriate agent and lead
+        if request.agent_type == "devops":
+            agent = devops_agent
+            lead_agent = devops_lead_agent
+        else:
+            agent = developer_agent
+            lead_agent = dev_lead_agent
+        
         # Process the query
         if request.show_details:
             try:
@@ -432,7 +460,7 @@ async def process_query(request: QueryRequest):
                     "reasoning": action.log
                 })
             
-            # Dev Lead Review - run if enabled, regardless of intermediate_steps
+            # Lead Review - run if enabled, regardless of intermediate_steps
             review_result = None
             if request.enable_review:
                 actions_for_review = [
@@ -444,7 +472,7 @@ async def process_query(request: QueryRequest):
                     for action, observation in intermediate_steps
                 ]
                 
-                review_result = dev_lead_agent.review(
+                review_result = lead_agent.review(
                     task=request.query,
                     actions=actions_for_review,
                     result=response_text
@@ -496,7 +524,7 @@ async def process_query(request: QueryRequest):
 async def get_settings():
     """Get current settings."""
     return SettingsResponse(
-        project_root=agent.project_root,
+        project_root=developer_agent.project_root,
         model_name=os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp"),
         available_models=[
             "gemini-2.0-flash-exp",
@@ -508,7 +536,7 @@ async def get_settings():
 @app.post("/settings")
 async def update_settings(settings: SettingsRequest):
     """Update settings and reinitialize agents."""
-    global agent, dev_lead_agent
+    global developer_agent, dev_lead_agent, devops_agent, devops_lead_agent
     
     try:
         # Update project root if provided
@@ -524,9 +552,10 @@ async def update_settings(settings: SettingsRequest):
             # Update environment variable
             os.environ["PROJECT_ROOT"] = settings.project_root
             
-            # Reinitialize developer agent with new project root
+            # Reinitialize both agents with new project root
             auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
-            agent = DeveloperAgent(project_root=settings.project_root, auto_approve=auto_approve)
+            developer_agent = DeveloperAgent(project_root=settings.project_root, auto_approve=auto_approve)
+            devops_agent = DevOpsAgent(project_root=settings.project_root, auto_approve=auto_approve)
         
         # Update model name if provided
         if settings.model_name:
@@ -540,19 +569,21 @@ async def update_settings(settings: SettingsRequest):
             # Update environment variable
             os.environ["VERTEX_MODEL_NAME"] = settings.model_name
             
-            # Reinitialize both agents with new model
+            # Reinitialize all agents with new model
             auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
             project_root = os.getenv("PROJECT_ROOT", os.getcwd())
             if not os.path.isabs(project_root):
                 project_root = os.path.abspath(project_root)
             
-            agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
+            developer_agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
             dev_lead_agent = DevLeadAgent()
+            devops_agent = DevOpsAgent(project_root=project_root, auto_approve=auto_approve)
+            devops_lead_agent = DevOpsLeadAgent()
         
         return {
             "status": "success",
             "message": "Settings updated successfully",
-            "project_root": agent.project_root,
+            "project_root": developer_agent.project_root,
             "model_name": os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp")
         }
     except HTTPException:

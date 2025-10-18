@@ -75,6 +75,7 @@ function App() {
   const [showDetails, setShowDetails] = useState<boolean>(true)
   const [enableReview, setEnableReview] = useState<boolean>(true)
   const [useStreaming, setUseStreaming] = useState<boolean>(true)
+  const [agentType, setAgentType] = useState<string>('developer')
   const [error, setError] = useState<string | null>(null)
   const [projectRoot, setProjectRoot] = useState<string>('')
   const [modelName, setModelName] = useState<string>('gemini-2.0-flash-exp')
@@ -135,7 +136,8 @@ function App() {
           query,
           session_id: sessionId,
           show_details: showDetails,
-          enable_review: enableReview
+          enable_review: enableReview,
+          agent_type: agentType
         })
       })
 
@@ -253,7 +255,8 @@ function App() {
           query,
           session_id: sessionId,
           show_details: showDetails,
-          enable_review: enableReview
+          enable_review: enableReview,
+          agent_type: agentType
         })
 
         const assistantMessage: Message = {
@@ -351,7 +354,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>🤖 Developer Assistant</h1>
+        <h1>🤖 AI Assistant</h1>
         <div className="header-info">
           {sessionId && (
             <span className="session-id">Session: {sessionId.substring(0, 8)}...</span>
@@ -362,6 +365,21 @@ function App() {
       <div className="main-layout">
         {/* Left Sidebar - Session & Settings */}
         <aside className="sidebar">
+          <div className="sidebar-section">
+            <h3>🤖 Agent Type</h3>
+            <div className="setting-group">
+              <select 
+                value={agentType} 
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setAgentType(e.target.value)}
+                className="setting-select"
+              >
+                <option value="developer">👨‍💻 Developer Agent</option>
+                <option value="devops">🔧 DevOps Agent</option>
+              </select>
+              <small>Choose between Developer or DevOps expertise</small>
+            </div>
+          </div>
+
           <div className="sidebar-section">
             <h3>📋 Session</h3>
             <div className="sidebar-buttons">
@@ -424,7 +442,7 @@ function App() {
                   checked={enableReview}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setEnableReview(e.target.checked)}
                 />
-                <span>👔 Dev Lead Review</span>
+                <span>👔 Lead Review</span>
               </label>
               <label className="toggle">
                 <input
@@ -444,52 +462,6 @@ function App() {
           </div>
         </aside>
 
-      {showBrowser && (
-        <div className="directory-browser">
-          <div className="browser-header">
-            <h3>📁 Browse Directory</h3>
-            <button onClick={() => setShowBrowser(false)} className="btn-close">✕</button>
-          </div>
-          
-          <div className="current-path">
-            <strong>Current:</strong> {currentPath}
-          </div>
-
-          <div className="directory-list">
-            {parentPath && (
-              <div 
-                className="directory-item parent" 
-                onClick={() => browseDirectory(parentPath)}
-              >
-                <span>📁 ..</span>
-              </div>
-            )}
-            
-            {directories.map((dir) => (
-              <div 
-                key={dir.path} 
-                className="directory-item"
-                onDoubleClick={() => browseDirectory(dir.path)}
-              >
-                <span>📁 {dir.name}</span>
-                <button 
-                  onClick={() => selectDirectory(dir.path)}
-                  className="btn btn-small"
-                >
-                  Select
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="browser-actions">
-            <button onClick={() => selectDirectory(currentPath)} className="btn btn-primary">
-              Select Current Directory
-            </button>
-          </div>
-        </div>
-      )}
-
         {/* Right Main Area - Chat */}
         <main className="main-content">
           {error && (
@@ -502,15 +474,22 @@ function App() {
         <div className="messages">
           {messages.length === 0 && (
             <div className="welcome">
-              <h2>Welcome to Developer Assistant!</h2>
-              <p>I can help you with:</p>
+              <h2>Welcome to AI Assistant!</h2>
+              <p><strong>👨‍💻 Developer Agent</strong> can help you with:</p>
               <ul>
-                <li>Creating and editing files</li>
-                <li>Reading file contents</li>
-                <li>Listing directories</li>
-                <li>Deleting files</li>
+                <li>Creating and editing code files</li>
+                <li>Reading and modifying file contents</li>
+                <li>Python, JavaScript, and other programming languages</li>
+                <li>Code reviews and best practices</li>
               </ul>
-              <p>Try asking: "Create a Python file with a hello world function"</p>
+              <p><strong>🔧 DevOps Agent</strong> specializes in:</p>
+              <ul>
+                <li>Terraform infrastructure as code</li>
+                <li>Kubernetes deployments and configurations</li>
+                <li>Jenkins CI/CD pipelines</li>
+                <li>Groovy scripting and automation</li>
+              </ul>
+              <p>Try asking: "Create a Terraform configuration for an AWS EC2 instance" or "Create a Python file with a hello world function"</p>
             </div>
           )}
 
@@ -521,7 +500,7 @@ function App() {
                   {msg.role === 'user' ? '👤 You' : 
                     msg.role === 'error' ? '❌ Error' : 
                     msg.role === 'status' ? '⚙️ Status' :
-                    msg.role === 'review' ? '👔 Dev Lead Review' :
+                    msg.role === 'review' ? '👔 Lead Review' :
                     '🤖 Assistant'}
                 </strong>
               </div>
@@ -633,6 +612,52 @@ function App() {
           </div>
         </main>
       </div>
+
+      {showBrowser && (
+        <div className="directory-browser">
+          <div className="browser-header">
+            <h3>📁 Browse Directory</h3>
+            <button onClick={() => setShowBrowser(false)} className="btn-close">✕</button>
+          </div>
+          
+          <div className="current-path">
+            <strong>Current:</strong> {currentPath}
+          </div>
+
+          <div className="directory-list">
+            {parentPath && (
+              <div 
+                className="directory-item parent" 
+                onClick={() => browseDirectory(parentPath)}
+              >
+                <span>📁 ..</span>
+              </div>
+            )}
+            
+            {directories.map((dir) => (
+              <div 
+                key={dir.path} 
+                className="directory-item"
+                onDoubleClick={() => browseDirectory(dir.path)}
+              >
+                <span>📁 {dir.name}</span>
+                <button 
+                  onClick={() => selectDirectory(dir.path)}
+                  className="btn btn-small"
+                >
+                  Select
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="browser-actions">
+            <button onClick={() => selectDirectory(currentPath)} className="btn btn-primary">
+              Select Current Directory
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

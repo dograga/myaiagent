@@ -638,11 +638,13 @@ function App() {
               <div 
                 key={dir.path} 
                 className="directory-item"
-                onDoubleClick={() => browseDirectory(dir.path)}
               >
-                <span>📁 {dir.name}</span>
+                <span onClick={() => browseDirectory(dir.path)} style={{ cursor: 'pointer', flex: 1 }}>📁 {dir.name}</span>
                 <button 
-                  onClick={() => selectDirectory(dir.path)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    selectDirectory(dir.path)
+                  }}
                   className="btn btn-small"
                 >
                   Select

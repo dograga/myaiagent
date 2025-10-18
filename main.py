@@ -570,14 +570,13 @@ async def update_settings(settings: SettingsRequest):
             os.environ["VERTEX_MODEL_NAME"] = settings.model_name
             
             # Reinitialize all agents with new model
+            # Use current agent's project_root to preserve any updates made in this session
             auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
-            project_root = os.getenv("PROJECT_ROOT", os.getcwd())
-            if not os.path.isabs(project_root):
-                project_root = os.path.abspath(project_root)
+            current_project_root = developer_agent.project_root
             
-            developer_agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
+            developer_agent = DeveloperAgent(project_root=current_project_root, auto_approve=auto_approve)
             dev_lead_agent = DevLeadAgent()
-            devops_agent = DevOpsAgent(project_root=project_root, auto_approve=auto_approve)
+            devops_agent = DevOpsAgent(project_root=current_project_root, auto_approve=auto_approve)
             devops_lead_agent = DevOpsLeadAgent()
         
         return {

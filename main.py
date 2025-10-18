@@ -11,6 +11,8 @@ from agent.developer_agent import DeveloperAgent
 from agent.dev_lead_agent import DevLeadAgent
 from agent.devops_agent import DevOpsAgent
 from agent.devops_lead_agent import DevOpsLeadAgent
+from agent.projectmanager_agent import ProjectManagerAgent
+from agent.projectmanager_lead_agent import ProjectManagerLeadAgent
 from session_manager import SessionManager
 
 # Load environment variables
@@ -35,11 +37,13 @@ if not os.path.isabs(project_root):
 # Get auto-approve setting from environment (default: True)
 auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
 
-# Initialize both developer and devops agents
+# Initialize all agents
 developer_agent = DeveloperAgent(project_root=project_root, auto_approve=auto_approve)
 dev_lead_agent = DevLeadAgent()
 devops_agent = DevOpsAgent(project_root=project_root, auto_approve=auto_approve)
 devops_lead_agent = DevOpsLeadAgent()
+projectmanager_agent = ProjectManagerAgent(auto_approve=auto_approve)
+projectmanager_lead_agent = ProjectManagerLeadAgent()
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):
@@ -48,7 +52,7 @@ class QueryRequest(BaseModel):
     show_details: bool = True
     enable_review: bool = True  # Enable Lead review
     stream: bool = False  # Enable streaming
-    agent_type: str = "developer"  # "developer" or "devops"
+    agent_type: str = "developer"  # "developer", "devops", or "projectmanager"
 
 class SettingsRequest(BaseModel):
     project_root: Optional[str] = None
@@ -204,6 +208,11 @@ async def stream_agent_response(
             lead_agent = devops_lead_agent
             agent_name = "DevOps Agent"
             lead_name = "DevOps Lead"
+        elif agent_type == "projectmanager":
+            agent = projectmanager_agent
+            lead_agent = projectmanager_lead_agent
+            agent_name = "Project Manager Agent"
+            lead_name = "PM Lead"
         else:
             agent = developer_agent
             lead_agent = dev_lead_agent
@@ -420,6 +429,9 @@ async def process_query(request: QueryRequest):
         if request.agent_type == "devops":
             agent = devops_agent
             lead_agent = devops_lead_agent
+        elif request.agent_type == "projectmanager":
+            agent = projectmanager_agent
+            lead_agent = projectmanager_lead_agent
         else:
             agent = developer_agent
             lead_agent = dev_lead_agent
@@ -536,7 +548,7 @@ async def get_settings():
 @app.post("/settings")
 async def update_settings(settings: SettingsRequest):
     """Update settings and reinitialize agents."""
-    global developer_agent, dev_lead_agent, devops_agent, devops_lead_agent
+    global developer_agent, dev_lead_agent, devops_agent, devops_lead_agent, projectmanager_agent, projectmanager_lead_agent
     
     try:
         # Update project root if provided
@@ -578,6 +590,8 @@ async def update_settings(settings: SettingsRequest):
             dev_lead_agent = DevLeadAgent()
             devops_agent = DevOpsAgent(project_root=current_project_root, auto_approve=auto_approve)
             devops_lead_agent = DevOpsLeadAgent()
+            projectmanager_agent = ProjectManagerAgent(auto_approve=auto_approve)
+            projectmanager_lead_agent = ProjectManagerLeadAgent()
         
         return {
             "status": "success",

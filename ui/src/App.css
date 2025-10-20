@@ -282,6 +282,22 @@
   border-left: 4px solid #c33;
 }
 
+.message.status {
+  align-self: center;
+  background: #fff3cd;
+  color: #856404;
+  border-left: 4px solid #ffc107;
+  max-width: 60%;
+  font-style: italic;
+}
+
+.message.review {
+  align-self: flex-start;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-left: 4px solid #4caf50;
+}
+
 .message-header {
   font-size: 12px;
   opacity: 0.8;
@@ -489,6 +505,22 @@
   margin-top: 4px;
 }
 
+.current-project-root {
+  background: #f0f2ff;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  border: 1px solid #667eea;
+}
+
+.current-project-root code {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #667eea;
+  font-weight: 600;
+  word-break: break-all;
+}
+
 .setting-select,
 .setting-input {
   width: 100%;
@@ -641,4 +673,55 @@
   border-top: 1px solid #e0e0e0;
   background: #f8f9fa;
   border-radius: 0 0 12px 12px;
+}
+
+/* Review Details */
+.review-details {
+  margin-top: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #4caf50;
+  border-radius: 6px;
+}
+
+.review-decision {
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.review-decision.approved {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.review-decision.needs_improvement {
+  background: #fff9c4;
+  color: #f57f17;
+}
+
+.review-decision.rejected {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.review-issues,
+.review-suggestions,
+.review-comments {
+  margin-top: 10px;
+}
+
+.review-issues ul,
+.review-suggestions ul,
+.review-comments ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.review-issues li,
+.review-suggestions li,
+.review-comments li {
+  margin: 4px 0;
+  font-size: 13px;
 }

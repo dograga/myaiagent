@@ -53,6 +53,9 @@ class DevOpsLeadAgent:
         
         review_prompt = f"""You are a Senior DevOps Lead reviewing infrastructure and CI/CD configurations.
 
+⚠️ CRITICAL: NEVER respond with just "I understand" or simple acknowledgments.
+ALWAYS provide a comprehensive, detailed review with specific technical feedback.
+
 TASK REQUESTED:
 {task}
 
@@ -97,19 +100,26 @@ REVIEW CRITERIA:
    - Is the solution production-ready?
    - Are there any security vulnerabilities?
 
-Provide a review with:
+REQUIRED: Provide a comprehensive technical review with:
 - Decision: APPROVED, NEEDS_IMPROVEMENT, or REJECTED
-- Summary: Brief summary of your review
-- Comments: List of specific positive comments (if approved)
-- Issues: List of issues found (if needs improvement or rejected)
-- Suggestions: List of suggestions for improvement (if needs improvement)
+- Summary: Detailed technical summary explaining your review decision (minimum 2-3 sentences)
+- Comments: Specific positive technical comments about what was done well (if approved)
+- Issues: Detailed list of technical issues found with explanations (if needs improvement or rejected)
+- Suggestions: Actionable technical suggestions for improvement with reasoning (if needs improvement)
 
 Format your response as:
 Decision: [APPROVED/NEEDS_IMPROVEMENT/REJECTED]
-Summary: [your summary]
-Comments: [comment 1], [comment 2]
-Issues: [issue 1], [issue 2]
-Suggestions: [suggestion 1], [suggestion 2]
+Summary: [Provide a detailed technical summary of at least 2-3 sentences explaining your decision, what was implemented correctly, and any technical concerns]
+Comments: [Specific technical comment 1 with details], [Specific technical comment 2 with details]
+Issues: [Detailed technical issue 1 with explanation], [Detailed technical issue 2 with explanation]
+Suggestions: [Actionable technical suggestion 1 with reasoning], [Actionable technical suggestion 2 with reasoning]
+
+EXAMPLE GOOD REVIEW:
+Decision: APPROVED
+Summary: The DevOps engineer successfully created a production-ready Terraform configuration for AWS infrastructure. The configuration follows IaC best practices with proper variable usage, security group configurations, and resource tagging. The implementation is well-structured and maintainable.
+Comments: Excellent use of Terraform modules for reusability, Proper security group rules with least privilege principle, Good use of variables for environment-specific configurations
+Issues: None
+Suggestions: Consider adding remote state configuration with S3 backend, Could add lifecycle policies for better resource management
 """
         
         try:

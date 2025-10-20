@@ -375,9 +375,8 @@ function App() {
               >
                 <option value="developer">👨‍💻 Developer Agent</option>
                 <option value="devops">🔧 DevOps Agent</option>
-                <option value="projectmanager">📊 Project Manager Agent</option>
               </select>
-              <small>Choose between Developer, DevOps, or Project Manager expertise</small>
+              <small>Choose between Developer or DevOps expertise</small>
             </div>
           </div>
 
@@ -414,6 +413,9 @@ function App() {
 
             <div className="setting-group">
               <label>Project Root:</label>
+              <div className="current-project-root">
+                <code>{projectRoot || 'Not set'}</code>
+              </div>
               <div className="path-input-group-vertical">
                 <input 
                   type="text" 
@@ -490,14 +492,7 @@ function App() {
                 <li>Jenkins CI/CD pipelines</li>
                 <li>Groovy scripting and automation</li>
               </ul>
-              <p><strong>📊 Project Manager Agent</strong> specializes in:</p>
-              <ul>
-                <li>Reading Jira epics and stories</li>
-                <li>Updating story statuses and assignments</li>
-                <li>Tracking project progress</li>
-                <li>Providing project summaries</li>
-              </ul>
-              <p>Try asking: "List epics assigned to me", "Show stories in epic PROJ-123", or "Create a Python file with a hello world function"</p>
+              <p>Try asking: "Create a Python file with a hello world function" or "Help me set up a Kubernetes deployment"</p>
             </div>
           )}
 

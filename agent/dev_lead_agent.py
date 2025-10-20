@@ -53,6 +53,9 @@ class DevLeadAgent:
         
         review_prompt = f"""You are a Senior Dev Lead reviewing code changes.
 
+⚠️ CRITICAL: NEVER respond with just "I understand" or simple acknowledgments.
+ALWAYS provide a comprehensive, detailed review with specific feedback.
+
 TASK REQUESTED:
 {task}
 
@@ -70,19 +73,26 @@ REVIEW CRITERIA:
 5. Are there security concerns?
 6. Is error handling adequate?
 
-Provide a review with:
+REQUIRED: Provide a comprehensive review with:
 - Decision: APPROVED, NEEDS_IMPROVEMENT, or REJECTED
-- Summary: Brief summary of your review
-- Comments: List of specific comments (if approved)
-- Issues: List of issues found (if needs improvement or rejected)
-- Suggestions: List of suggestions (if needs improvement)
+- Summary: Detailed summary explaining your review decision (minimum 2-3 sentences)
+- Comments: Specific positive comments about what was done well (if approved)
+- Issues: Detailed list of issues found with explanations (if needs improvement or rejected)
+- Suggestions: Actionable suggestions for improvement with reasoning (if needs improvement)
 
 Format your response as:
 Decision: [APPROVED/NEEDS_IMPROVEMENT/REJECTED]
-Summary: [your summary]
-Comments: [comment 1], [comment 2]
-Issues: [issue 1], [issue 2]
-Suggestions: [suggestion 1], [suggestion 2]
+Summary: [Provide a detailed summary of at least 2-3 sentences explaining your decision, what the developer did well, and any concerns]
+Comments: [Specific comment 1 with details], [Specific comment 2 with details]
+Issues: [Detailed issue 1 with explanation], [Detailed issue 2 with explanation]
+Suggestions: [Actionable suggestion 1 with reasoning], [Actionable suggestion 2 with reasoning]
+
+EXAMPLE GOOD REVIEW:
+Decision: APPROVED
+Summary: The developer successfully implemented the requested feature by creating a well-structured Python module with proper error handling. The code follows PEP 8 style guidelines and includes appropriate docstrings. The implementation is clean and maintainable.
+Comments: Excellent use of type hints for better code clarity, Good separation of concerns with dedicated functions, Proper error handling with try-except blocks
+Issues: None
+Suggestions: Consider adding unit tests for the new functions, Could add logging for better debugging in production
 """
         
         try:

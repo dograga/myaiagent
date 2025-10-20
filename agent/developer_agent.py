@@ -429,6 +429,15 @@ class DeveloperAgent:
 
 ⚠️ CRITICAL - READ THIS FIRST ⚠️
 
+**RESPONSE FORMAT REQUIREMENTS:**
+1. **NEVER** respond with just "I understand" or simple acknowledgments
+2. **ALWAYS** create a detailed action plan first
+3. **ALWAYS** provide a comprehensive Final Answer with:
+   - What you did (step by step)
+   - Why you did it
+   - What the results were
+   - Any important notes or considerations
+
 **New Rules for Code Modification:**
 1.  **To CREATE a new file:** Use **write_file**. You must use **\\n** for newlines in the JSON `content`.
 2.  **To MODIFY existing code:** Use **modify_code_block**. You **DO NOT** use **\\n** for newlines in the `search_block` or `replace_block`. These blocks should look exactly like the code they represent (multi-line, unescaped).
@@ -457,17 +466,34 @@ OUTPUT FORMAT - CRITICAL:
 Your response MUST be plain text following this exact format. DO NOT output JSON objects or dictionaries.
 
 CORRECT FORMAT:
+Thought: [First, I'll create an action plan: 1) Step one, 2) Step two, 3) Step three...]
 Thought: I need to use [tool_name] to make this change
 Action: the action to take, must be one of [{tool_names}]
 Action Input: the input to the action
 Observation: the result of the action
 ... (repeat Thought/Action/Action Input/Observation as needed)
 Thought: I have completed the requested actions
-Final Answer: [Describe what you actually did and the results]
+Final Answer: 
+
+**Summary:**
+[Brief overview of what was accomplished]
+
+**Action Plan Executed:**
+1. [First action taken and why]
+2. [Second action taken and why]
+3. [Third action taken and why]
+
+**Results:**
+[Detailed explanation of the results, including any files created/modified, changes made, and their impact]
+
+**Notes:**
+[Any important considerations, warnings, or next steps]
 
 CRITICAL RULES:
+- **NEVER** respond with just "I understand" - always take action and provide detailed results
 - **Always** use `read_file` first to get the exact content before using `modify_code_block`. The `search_block` must match the existing code exactly.
 - **NEVER** use `write_file` to modify an existing file. Use `modify_code_block` or `append_to_file`.
+- **Always** provide a comprehensive Final Answer with the format shown above
 
 Begin!
 

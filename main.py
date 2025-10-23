@@ -11,6 +11,7 @@ from agent.developer_agent import DeveloperAgent
 from agent.dev_lead_agent import DevLeadAgent
 from agent.devops_agent import DevOpsAgent
 from agent.devops_lead_agent import DevOpsLeadAgent
+from agent.cloud_architect_agent import CloudArchitectAgent
 from session_manager import SessionManager
 
 # Load environment variables
@@ -40,6 +41,7 @@ developer_agent = DeveloperAgent(project_root=project_root, auto_approve=auto_ap
 dev_lead_agent = DevLeadAgent()
 devops_agent = DevOpsAgent(project_root=project_root, auto_approve=auto_approve)
 devops_lead_agent = DevOpsLeadAgent()
+cloud_architect_agent = CloudArchitectAgent(project_root=project_root, auto_approve=auto_approve)
 session_manager = SessionManager(session_timeout_minutes=60)
 
 class QueryRequest(BaseModel):
@@ -48,7 +50,7 @@ class QueryRequest(BaseModel):
     show_details: bool = True
     enable_review: bool = True  # Enable Lead review
     stream: bool = False  # Enable streaming
-    agent_type: str = "developer"  # "developer" or "devops"
+    agent_type: str = "developer"  # "developer", "devops", or "cloud_architect"
 
 class SettingsRequest(BaseModel):
     project_root: Optional[str] = None
@@ -204,6 +206,11 @@ async def stream_agent_response(
             lead_agent = devops_lead_agent
             agent_name = "DevOps Agent"
             lead_name = "DevOps Lead"
+        elif agent_type == "cloud_architect":
+            agent = cloud_architect_agent
+            lead_agent = None  # Cloud Architect doesn't need review
+            agent_name = "Cloud Architect"
+            lead_name = None
         else:
             agent = developer_agent
             lead_agent = dev_lead_agent
@@ -274,8 +281,8 @@ async def stream_agent_response(
             }) + "\n"
             await asyncio.sleep(0.1)
             
-            # Lead Review - ALWAYS run if enabled, even with no intermediate steps
-            if enable_review:
+            # Lead Review - ALWAYS run if enabled and lead_agent exists
+            if enable_review and lead_agent:
                 yield json.dumps({
                     "type": "status",
                     "message": f"👔 {lead_name} reviewing changes..."
@@ -319,7 +326,7 @@ async def stream_agent_response(
             await asyncio.sleep(0.1)
             
             # Lead Review for non-detailed mode
-            if enable_review:
+            if enable_review and lead_agent:
                 yield json.dumps({
                     "type": "status",
                     "message": f"👔 {lead_name} reviewing changes..."
@@ -420,6 +427,9 @@ async def process_query(request: QueryRequest):
         if request.agent_type == "devops":
             agent = devops_agent
             lead_agent = devops_lead_agent
+        elif request.agent_type == "cloud_architect":
+            agent = cloud_architect_agent
+            lead_agent = None  # Cloud Architect doesn't need review
         else:
             agent = developer_agent
             lead_agent = dev_lead_agent
@@ -460,9 +470,9 @@ async def process_query(request: QueryRequest):
                     "reasoning": action.log
                 })
             
-            # Lead Review - run if enabled, regardless of intermediate_steps
+            # Lead Review - run if enabled and lead_agent exists
             review_result = None
-            if request.enable_review:
+            if request.enable_review and lead_agent:
                 actions_for_review = [
                     {
                         "action": action.tool,
@@ -536,7 +546,7 @@ async def get_settings():
 @app.post("/settings")
 async def update_settings(settings: SettingsRequest):
     """Update settings and reinitialize agents."""
-    global developer_agent, dev_lead_agent, devops_agent, devops_lead_agent
+    global developer_agent, dev_lead_agent, devops_agent, devops_lead_agent, cloud_architect_agent
     
     try:
         # Update project root if provided
@@ -552,10 +562,11 @@ async def update_settings(settings: SettingsRequest):
             # Update environment variable
             os.environ["PROJECT_ROOT"] = settings.project_root
             
-            # Reinitialize both agents with new project root
+            # Reinitialize all agents with new project root
             auto_approve = os.getenv("AUTO_APPROVE", "true").lower() in ("true", "1", "yes")
             developer_agent = DeveloperAgent(project_root=settings.project_root, auto_approve=auto_approve)
             devops_agent = DevOpsAgent(project_root=settings.project_root, auto_approve=auto_approve)
+            cloud_architect_agent = CloudArchitectAgent(project_root=settings.project_root, auto_approve=auto_approve)
         
         # Update model name if provided
         if settings.model_name:
@@ -578,6 +589,7 @@ async def update_settings(settings: SettingsRequest):
             dev_lead_agent = DevLeadAgent()
             devops_agent = DevOpsAgent(project_root=current_project_root, auto_approve=auto_approve)
             devops_lead_agent = DevOpsLeadAgent()
+            cloud_architect_agent = CloudArchitectAgent(project_root=current_project_root, auto_approve=auto_approve)
         
         return {
             "status": "success",

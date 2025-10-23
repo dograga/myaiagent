@@ -375,8 +375,9 @@ function App() {
               >
                 <option value="developer">👨‍💻 Developer Agent</option>
                 <option value="devops">🔧 DevOps Agent</option>
+                <option value="cloud_architect">☁️ Cloud Architect</option>
               </select>
-              <small>Choose between Developer or DevOps expertise</small>
+              <small>Choose between Developer, DevOps, or Cloud Architect expertise</small>
             </div>
           </div>
 

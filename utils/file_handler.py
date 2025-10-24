@@ -4,6 +4,7 @@ File handler utility for processing different file types
 import os
 import base64
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -31,6 +32,65 @@ class FileHandler:
                        '.md', '.yaml', '.yml', '.xml', '.html', '.css', '.java',
                        '.c', '.cpp', '.h', '.go', '.rs', '.sh', '.bash', '.sql',
                        '.env', '.config', '.ini', '.toml', '.log'}
+    
+    @staticmethod
+    def validate_file_type(filename: str) -> str:
+        """Validate and return file type (static method for backward compatibility)"""
+        ext = Path(filename).suffix.lower()
+        
+        if ext in FileHandler.IMAGE_EXTENSIONS:
+            return 'image'
+        elif ext in FileHandler.PDF_EXTENSIONS:
+            return 'pdf'
+        elif ext in FileHandler.TEXT_EXTENSIONS:
+            return 'text'
+        else:
+            raise ValueError(f"File type {ext} is not supported")
+    
+    @staticmethod
+    def save_temp_file(content: bytes, filename: str) -> str:
+        """Save file content to temp directory (static method)"""
+        import tempfile
+        import uuid
+        
+        # Create temp file with unique name
+        temp_dir = tempfile.gettempdir()
+        unique_filename = f"file_upload_{uuid.uuid4().hex}_{filename}"
+        temp_path = os.path.join(temp_dir, unique_filename)
+        
+        # Write content
+        with open(temp_path, 'wb') as f:
+            f.write(content)
+        
+        return temp_path
+    
+    @staticmethod
+    def extract_pdf_text(file_path: str) -> str:
+        """Extract text from PDF file (static method)"""
+        if not PDF_SUPPORT:
+            return f"[PDF file] - PDF support not available. Please install PyPDF2."
+        
+        try:
+            text_content = []
+            with open(file_path, 'rb') as f:
+                pdf_reader = PyPDF2.PdfReader(f)
+                for page_num in range(len(pdf_reader.pages)):
+                    page = pdf_reader.pages[page_num]
+                    text_content.append(f"\n--- Page {page_num + 1} ---\n")
+                    text_content.append(page.extract_text())
+            
+            return ''.join(text_content)
+        except Exception as e:
+            return f"[PDF file] - Error reading PDF: {str(e)}"
+    
+    @staticmethod
+    def cleanup_temp_file(file_path: str) -> None:
+        """Delete temporary file (static method)"""
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Error deleting temp file {file_path}: {e}")
     
     def __init__(self, temp_dir: str = None):
         """Initialize file handler with temp directory"""

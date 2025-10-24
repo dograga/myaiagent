@@ -4,6 +4,7 @@ Specializes in security, DevOps, resiliency, networks, and regulatory compliance
 """
 from typing import Dict, Any, Optional, Union, List
 from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.callbacks.manager import CallbackManagerForLLMRun
 from langchain_google_vertexai import VertexAI
@@ -249,10 +250,16 @@ Question: {input}"""
             return_messages=True
         )
         
+        # Create prompt template
+        prompt = PromptTemplate(
+            input_variables=["input", "history"],
+            template=template
+        )
+        
         # Create the LLM chain (no tools needed for consulting)
         llm_chain = LLMChain(
             llm=self.llm,
-            prompt=template,
+            prompt=prompt,
             memory=memory,
             verbose=True
         )

@@ -78,11 +78,10 @@ function App() {
   const [agentType, setAgentType] = useState<string>('developer')
   const [error, setError] = useState<string | null>(null)
   const [projectRoot, setProjectRoot] = useState<string>('')
-  const [modelName, setModelName] = useState<string>('gemini-2.0-flash-exp')
+  const [modelName, setModelName] = useState<string>('gemini-2.5-flash')
   const [availableModels, setAvailableModels] = useState<string[]>([
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro'
+    'gemini-2.5-flash',
+    'gemini-2.5-pro'
   ])
   const [showBrowser, setShowBrowser] = useState<boolean>(false)
   const [currentPath, setCurrentPath] = useState<string>('')

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -51,6 +51,7 @@ class QueryRequest(BaseModel):
     enable_review: bool = True  # Enable Lead review
     stream: bool = False  # Enable streaming
     agent_type: str = "developer"  # "developer", "devops", or "cloud_architect"
+    attached_files: Optional[List[Dict[str, str]]] = None  # List of {filename, content}
 
 class SettingsRequest(BaseModel):
     project_root: Optional[str] = None
@@ -176,6 +177,19 @@ async def list_sessions():
         "active_sessions": session_manager.get_active_sessions_count(),
         "sessions": session_manager.list_sessions()
     }
+
+def format_query_with_files(query: str, attached_files: Optional[List[Dict[str, str]]]) -> str:
+    """Format query with attached file contents."""
+    if not attached_files:
+        return query
+    
+    formatted_query = query + "\n\n**Attached Files:**\n"
+    for file_info in attached_files:
+        filename = file_info.get("filename", "unknown")
+        content = file_info.get("content", "")
+        formatted_query += f"\n--- File: {filename} ---\n{content}\n"
+    
+    return formatted_query
 
 async def stream_agent_response(
     query: str,
@@ -376,12 +390,15 @@ async def process_query_stream(request: QueryRequest):
             session_id = session_manager.create_session()
             session = session_manager.get_session(session_id)
         
+        # Format query with attached files
+        formatted_query = format_query_with_files(request.query, request.attached_files)
+        
         # Add user message to history
-        session.add_message("user", request.query)
+        session.add_message("user", formatted_query)
         
         return StreamingResponse(
             stream_agent_response(
-                request.query,
+                formatted_query,
                 session_id,
                 request.show_details,
                 request.enable_review,
@@ -420,8 +437,11 @@ async def process_query(request: QueryRequest):
             session_id = session_manager.create_session()
             session = session_manager.get_session(session_id)
         
+        # Format query with attached files
+        formatted_query = format_query_with_files(request.query, request.attached_files)
+        
         # Add user message to history
-        session.add_message("user", request.query)
+        session.add_message("user", formatted_query)
         
         # Select the appropriate agent and lead
         if request.agent_type == "devops":
@@ -437,7 +457,7 @@ async def process_query(request: QueryRequest):
         # Process the query
         if request.show_details:
             try:
-                result = agent.run(request.query, return_details=True)
+                result = agent.run(formatted_query, return_details=True)
                 
                 # Extract detailed information
                 response_text = result.get("output", "")
@@ -504,7 +524,7 @@ async def process_query(request: QueryRequest):
             
             return response_data
         else:
-            response = agent.run(request.query)
+            response = agent.run(formatted_query)
             session.add_message("assistant", response)
             
             return {

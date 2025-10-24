@@ -34,6 +34,9 @@ export function useFileAttachment() {
       })
       
       setAttachedFiles(prev => [...prev, ...supportedFiles])
+      
+      // Reset the input value to allow re-selecting the same file
+      e.target.value = ''
     }
   }
 
@@ -48,18 +51,24 @@ export function useFileAttachment() {
       const binaryExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'pdf']
       
       reader.onload = (e) => {
-        const result = e.target?.result as string
-        // For binary files, we already have base64 from readAsDataURL
-        // For text files, we have plain text
-        if (binaryExtensions.includes(ext || '')) {
-          // Extract base64 data from data URL (remove "data:image/png;base64," prefix)
-          const base64Data = result.split(',')[1] || result
-          resolve(base64Data)
-        } else {
-          resolve(result)
+        try {
+          const result = e.target?.result as string
+          // For binary files, we already have base64 from readAsDataURL
+          // For text files, we need to convert to base64
+          if (binaryExtensions.includes(ext || '')) {
+            // Extract base64 data from data URL (remove "data:image/png;base64," prefix)
+            const base64Data = result.split(',')[1] || result
+            resolve(base64Data)
+          } else {
+            // Convert text to base64 for consistent backend handling
+            const base64Text = btoa(unescape(encodeURIComponent(result)))
+            resolve(base64Text)
+          }
+        } catch (error) {
+          reject(new Error(`Failed to encode file ${file.name}: ${error}`))
         }
       }
-      reader.onerror = reject
+      reader.onerror = () => reject(new Error(`Failed to read file ${file.name}`))
       
       // Read binary files as base64, text files as text
       if (binaryExtensions.includes(ext || '')) {

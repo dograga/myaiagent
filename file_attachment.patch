@@ -1,0 +1,268 @@
+This patch adds file attachment functionality to the UI.
+
+=== PART 1: Add state variables (after line 89) ===
+
+Add these two lines after:
+  const [directories, setDirectories] = useState<DirectoryItem[]>([])
+
+Add:
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+=== PART 2: Add helper functions (after line 94) ===
+
+Add these functions after the scrollToBottom function:
+
+  const handleFileAttach = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files)
+      setAttachedFiles(prev => [...prev, ...newFiles])
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const readFileContent = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target?.result as string)
+      reader.onerror = reject
+      reader.readAsText(file)
+    })
+  }
+
+=== PART 3: Update sendMessage function (replace lines 236-257) ===
+
+Replace the entire sendMessage function with:
+
+  const sendMessage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!input.trim() || !sessionId) return
+
+    // Read attached files
+    const attachedFilesData: Array<{filename: string, content: string}> = []
+    if (attachedFiles.length > 0) {
+      for (const file of attachedFiles) {
+        try {
+          const content = await readFileContent(file)
+          attachedFilesData.push({ filename: file.name, content })
+        } catch (error) {
+          console.error(`Error reading ${file.name}:`, error)
+        }
+      }
+    }
+
+    // Create display message
+    let displayMessage = input
+    if (attachedFilesData.length > 0) {
+      displayMessage += '\n\n**Attached Files:**\n'
+      for (const f of attachedFilesData) {
+        displayMessage += `\n--- File: ${f.filename} ---\n${f.content}\n`
+      }
+    }
+
+    const userMessage: Message = { role: 'user', content: displayMessage }
+    setMessages((prev: Message[]) => [...prev, userMessage])
+    setInput('')
+    setAttachedFiles([])
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (useStreaming) {
+        await sendMessageStreaming(input, attachedFilesData)
+      } else {
+        const response = await axios.post<QueryResponse>(`${API_BASE}/query`, {
+          query: input,
+          session_id: sessionId,
+          show_details: showDetails,
+          enable_review: enableReview,
+          agent_type: agentType,
+          attached_files: attachedFilesData.length > 0 ? attachedFilesData : undefined
+        })
+
+        const assistantMessage: Message = {
+          role: 'assistant',
+          content: response.data.response,
+          thought_process: response.data.thought_process,
+          review: response.data.review
+        }
+
+        setMessages((prev: Message[]) => [...prev, assistantMessage])
+        
+        if (response.data.review) {
+          setMessages((prev: Message[]) => [...prev, {
+            role: 'review',
+            content: response.data.review?.review || 'Review completed',
+            review: response.data.review
+          }])
+        }
+      }
+    } catch (err) {
+      const error = err as AxiosError<{ detail: string }>
+      const errorMessage = error.response?.data?.detail || error.message
+      setError('Error: ' + errorMessage)
+      setMessages((prev: Message[]) => [...prev, {
+        role: 'error',
+        content: errorMessage
+      }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+=== PART 4: Update sendMessageStreaming signature (line 128) ===
+
+Change:
+  const sendMessageStreaming = async (query: string) => {
+
+To:
+  const sendMessageStreaming = async (query: string, attachedFilesData?: Array<{filename: string, content: string}>) => {
+
+=== PART 5: Update sendMessageStreaming body (line 132) ===
+
+In the body: JSON.stringify section, change:
+        body: JSON.stringify({
+          query,
+          session_id: sessionId,
+          show_details: showDetails,
+          enable_review: enableReview,
+          agent_type: agentType
+        })
+
+To:
+        body: JSON.stringify({
+          query,
+          session_id: sessionId,
+          show_details: showDetails,
+          enable_review: enableReview,
+          agent_type: agentType,
+          attached_files: attachedFilesData
+        })
+
+=== PART 6: Update form HTML (replace lines 589-614) ===
+
+Replace:
+        <form onSubmit={sendMessage} className="input-form">
+          <textarea
+            value={input}
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+            placeholder="Ask me to help with your code...\n\nPress Shift+Enter to send, Enter for new line."
+            disabled={loading || !sessionId}
+            className="input-field"
+            rows={3}
+            onKeyDown={(e) => {
+              // Submit on Shift+Enter (Enter alone = new line)
+              if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault()
+                if (!loading && sessionId && input.trim()) {
+                  sendMessage(e as any)
+                }
+              }
+            }}
+          />
+          <button 
+            type="submit" 
+            disabled={loading || !sessionId || !input.trim()}
+            className="btn btn-primary"
+          >
+            {loading ? 'Sending...' : 'Send'}
+          </button>
+        </form>
+
+With:
+        <form onSubmit={sendMessage} className="input-form">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+            multiple
+          />
+          
+          {attachedFiles.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              {attachedFiles.map((file, index) => (
+                <div key={index} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  padding: '4px 8px', 
+                  background: '#f0f0f0', 
+                  borderRadius: '4px',
+                  fontSize: '13px'
+                }}>
+                  <span>📎 {file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    style={{ 
+                      background: 'none', 
+                      border: 'none', 
+                      cursor: 'pointer',
+                      color: '#999',
+                      padding: '0 4px'
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={handleFileAttach}
+              disabled={loading || !sessionId}
+              style={{
+                padding: '12px 16px',
+                background: '#f0f0f0',
+                border: '2px solid #e0e0e0',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '20px'
+              }}
+              title="Attach file"
+            >
+              📎
+            </button>
+
+            <textarea
+              value={input}
+              onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+              placeholder="Ask me to help with your code...\n\nPress Shift+Enter to send, Enter for new line."
+              disabled={loading || !sessionId}
+              className="input-field"
+              rows={3}
+              onKeyDown={(e) => {
+                // Submit on Shift+Enter (Enter alone = new line)
+                if (e.key === 'Enter' && e.shiftKey) {
+                  e.preventDefault()
+                  if (!loading && sessionId && input.trim()) {
+                    sendMessage(e as any)
+                  }
+                }
+              }}
+            />
+            
+            <button 
+              type="submit" 
+              disabled={loading || !sessionId || !input.trim()}
+              className="btn btn-primary"
+            >
+              {loading ? 'Sending...' : 'Send'}
+            </button>
+          </div>
+        </form>
+
+=== DONE ===
+
+This patch uses inline styles to avoid CSS conflicts and keeps the original textarea styling.

@@ -51,13 +51,10 @@ function App() {
     // Read attached files
     const attachedFilesData = await readAllFiles()
 
-    // Create display message with file info
+    // Create display message - only show filenames, not content
     let displayMessage = input
     if (attachedFilesData.length > 0) {
-      displayMessage += '\n\n**Attached Files:**\n'
-      for (const f of attachedFilesData) {
-        displayMessage += `\n--- File: ${f.filename} ---\n${f.content}\n`
-      }
+      displayMessage += '\n\n📎 **Attached Files:** ' + attachedFilesData.map(f => f.filename).join(', ')
     }
 
     const userMessage: Message = { role: 'user', content: displayMessage }

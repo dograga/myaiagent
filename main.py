@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 import os
 import json
 import asyncio
+import base64
 from dotenv import load_dotenv
 from agent.developer_agent import DeveloperAgent
 from agent.dev_lead_agent import DevLeadAgent
@@ -13,6 +14,7 @@ from agent.devops_agent import DevOpsAgent
 from agent.devops_lead_agent import DevOpsLeadAgent
 from agent.cloud_architect_agent import CloudArchitectAgent
 from session_manager import SessionManager
+from utils.file_handler import FileHandler
 
 # Load environment variables
 load_dotenv()
@@ -178,18 +180,49 @@ async def list_sessions():
         "sessions": session_manager.list_sessions()
     }
 
-def format_query_with_files(query: str, attached_files: Optional[List[Dict[str, str]]]) -> str:
-    """Format query with attached file contents."""
-    if not attached_files:
-        return query
+def process_attached_files(attached_files: Optional[List[Dict[str, str]]]) -> tuple[str, List[str]]:
+    """Process attached files and return formatted text and list of temp file paths.
     
-    formatted_query = query + "\n\n**Attached Files:**\n"
+    Returns:
+        tuple: (formatted_text, temp_file_paths)
+    """
+    if not attached_files:
+        return "", []
+    
+    formatted_text = "\n\n**Attached Files:**\n"
+    temp_file_paths = []
+    
     for file_info in attached_files:
         filename = file_info.get("filename", "unknown")
-        content = file_info.get("content", "")
-        formatted_query += f"\n--- File: {filename} ---\n{content}\n"
+        content_base64 = file_info.get("content", "")
+        
+        try:
+            # Validate and process the file
+            file_type = FileHandler.validate_file_type(filename)
+            
+            # Decode base64 content
+            file_content = base64.b64decode(content_base64)
+            
+            # Save to temp file
+            temp_path = FileHandler.save_temp_file(file_content, filename)
+            temp_file_paths.append(temp_path)
+            
+            # Extract text content based on file type
+            if file_type == "pdf":
+                text_content = FileHandler.extract_pdf_text(temp_path)
+                formatted_text += f"\n--- File: {filename} (PDF) ---\n{text_content}\n"
+            elif file_type == "image":
+                formatted_text += f"\n--- File: {filename} (Image) ---\n[Image file attached - will be processed by AI model]\n"
+            else:  # text file
+                text_content = file_content.decode('utf-8', errors='ignore')
+                formatted_text += f"\n--- File: {filename} ---\n{text_content}\n"
+        
+        except ValueError as e:
+            formatted_text += f"\n--- File: {filename} (Error: {str(e)}) ---\n"
+        except Exception as e:
+            formatted_text += f"\n--- File: {filename} (Error processing file: {str(e)}) ---\n"
     
-    return formatted_query
+    return formatted_text, temp_file_paths
 
 async def stream_agent_response(
     query: str,
@@ -390,11 +423,19 @@ async def process_query_stream(request: QueryRequest):
             session_id = session_manager.create_session()
             session = session_manager.get_session(session_id)
         
-        # Format query with attached files
-        formatted_query = format_query_with_files(request.query, request.attached_files)
+        # Process attached files
+        file_text, temp_file_paths = process_attached_files(request.attached_files)
+        formatted_query = request.query + file_text
         
         # Add user message to history
         session.add_message("user", formatted_query)
+        
+        # Clean up temp files after processing
+        try:
+            for temp_path in temp_file_paths:
+                FileHandler.cleanup_temp_file(temp_path)
+        except Exception as e:
+            print(f"Warning: Failed to cleanup temp files: {e}")
         
         return StreamingResponse(
             stream_agent_response(
@@ -437,8 +478,9 @@ async def process_query(request: QueryRequest):
             session_id = session_manager.create_session()
             session = session_manager.get_session(session_id)
         
-        # Format query with attached files
-        formatted_query = format_query_with_files(request.query, request.attached_files)
+        # Process attached files
+        file_text, temp_file_paths = process_attached_files(request.attached_files)
+        formatted_query = request.query + file_text
         
         # Add user message to history
         session.add_message("user", formatted_query)
@@ -511,6 +553,13 @@ async def process_query(request: QueryRequest):
             # Add assistant response to history
             session.add_message("assistant", response_text)
             
+            # Clean up temp files
+            try:
+                for temp_path in temp_file_paths:
+                    FileHandler.cleanup_temp_file(temp_path)
+            except Exception as e:
+                print(f"Warning: Failed to cleanup temp files: {e}")
+            
             response_data = {
                 "status": "success",
                 "session_id": session_id,
@@ -526,6 +575,13 @@ async def process_query(request: QueryRequest):
         else:
             response = agent.run(formatted_query)
             session.add_message("assistant", response)
+            
+            # Clean up temp files
+            try:
+                for temp_path in temp_file_paths:
+                    FileHandler.cleanup_temp_file(temp_path)
+            except Exception as e:
+                print(f"Warning: Failed to cleanup temp files: {e}")
             
             return {
                 "status": "success",

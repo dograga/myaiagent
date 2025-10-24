@@ -115,25 +115,6 @@ class FileHandler:
         else:
             return 'unknown'
     
-    def save_temp_file(self, filename: str, content: str) -> Path:
-        """
-        Save file content to temp directory
-        Content is expected to be base64 encoded for binary files or plain text
-        """
-        file_path = self.temp_dir / filename
-        
-        # Try to decode as base64 first (for binary files)
-        try:
-            file_data = base64.b64decode(content)
-            with open(file_path, 'wb') as f:
-                f.write(file_data)
-        except Exception:
-            # If base64 decode fails, save as text
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-        
-        return file_path
-    
     def read_pdf(self, file_path: Path) -> str:
         """Extract text from PDF file"""
         if not PDF_SUPPORT:

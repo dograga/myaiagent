@@ -180,17 +180,18 @@ async def list_sessions():
         "sessions": session_manager.list_sessions()
     }
 
-def process_attached_files(attached_files: Optional[List[Dict[str, str]]]) -> tuple[str, List[str]]:
-    """Process attached files and return formatted text and list of temp file paths.
+def process_attached_files(attached_files: Optional[List[Dict[str, str]]]) -> tuple[str, List[str], List[str]]:
+    """Process attached files and return formatted text, temp file paths, and image paths.
     
     Returns:
-        tuple: (formatted_text, temp_file_paths)
+        tuple: (formatted_text, temp_file_paths, image_paths)
     """
     if not attached_files:
-        return "", []
+        return "", [], []
     
     formatted_text = "\n\n**Attached Files:**\n"
     temp_file_paths = []
+    image_paths = []
     
     for file_info in attached_files:
         filename = file_info.get("filename", "unknown")
@@ -212,7 +213,9 @@ def process_attached_files(attached_files: Optional[List[Dict[str, str]]]) -> tu
                 text_content = FileHandler.extract_pdf_text(temp_path)
                 formatted_text += f"\n--- File: {filename} (PDF) ---\n{text_content}\n"
             elif file_type == "image":
-                formatted_text += f"\n--- File: {filename} (Image) ---\n[Image file attached - will be processed by AI model]\n"
+                # Store image path for multimodal processing
+                image_paths.append(temp_path)
+                formatted_text += f"\n--- File: {filename} (Image) ---\n[Image attached for analysis]\n"
             else:  # text file
                 text_content = file_content.decode('utf-8', errors='ignore')
                 formatted_text += f"\n--- File: {filename} ---\n{text_content}\n"
@@ -222,14 +225,15 @@ def process_attached_files(attached_files: Optional[List[Dict[str, str]]]) -> tu
         except Exception as e:
             formatted_text += f"\n--- File: {filename} (Error processing file: {str(e)}) ---\n"
     
-    return formatted_text, temp_file_paths
+    return formatted_text, temp_file_paths, image_paths
 
 async def stream_agent_response(
     query: str,
     session_id: str,
     show_details: bool,
     enable_review: bool,
-    agent_type: str = "developer"
+    agent_type: str = "developer",
+    image_paths: List[str] = None
 ) -> AsyncGenerator[str, None]:
     """Stream the agent's response with progress updates."""
     try:
@@ -275,7 +279,11 @@ async def stream_agent_response(
         # NOTE: agent.run() is synchronous and blocks, but we stream results after
         if show_details:
             try:
-                result = agent.run(query, return_details=True)
+                # Pass image_paths for Cloud Architect agent
+                if agent_type == "cloud_architect" and image_paths:
+                    result = agent.run(query, return_details=True, image_paths=image_paths)
+                else:
+                    result = agent.run(query, return_details=True)
                 response_text = result.get("output", "")
                 intermediate_steps = result.get("intermediate_steps", [])
                 
@@ -360,7 +368,11 @@ async def stream_agent_response(
                 await asyncio.sleep(0.1)
         else:
             try:
-                response = agent.run(query)
+                # Pass image_paths for Cloud Architect agent
+                if agent_type == "cloud_architect" and image_paths:
+                    response = agent.run(query, image_paths=image_paths)
+                else:
+                    response = agent.run(query)
                 if not response:
                     response = "Agent completed but no output was generated."
             except Exception as e:
@@ -424,29 +436,29 @@ async def process_query_stream(request: QueryRequest):
             session = session_manager.get_session(session_id)
         
         # Process attached files
-        file_text, temp_file_paths = process_attached_files(request.attached_files)
+        file_text, temp_file_paths, image_paths = process_attached_files(request.attached_files)
         formatted_query = request.query + file_text
         
         # Add user message to history
         session.add_message("user", formatted_query)
         
-        # Clean up temp files after processing
-        try:
-            for temp_path in temp_file_paths:
-                FileHandler.cleanup_temp_file(temp_path)
-        except Exception as e:
-            print(f"Warning: Failed to cleanup temp files: {e}")
-        
-        return StreamingResponse(
+        # Stream response (don't cleanup files yet - needed during processing)
+        response = StreamingResponse(
             stream_agent_response(
                 formatted_query,
                 session_id,
                 request.show_details,
                 request.enable_review,
-                request.agent_type
+                request.agent_type,
+                image_paths
             ),
             media_type="application/x-ndjson"
         )
+        
+        # Note: Cleanup happens after streaming completes
+        # For now, files will be cleaned up by periodic cleanup or next request
+        
+        return response
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -479,7 +491,7 @@ async def process_query(request: QueryRequest):
             session = session_manager.get_session(session_id)
         
         # Process attached files
-        file_text, temp_file_paths = process_attached_files(request.attached_files)
+        file_text, temp_file_paths, image_paths = process_attached_files(request.attached_files)
         formatted_query = request.query + file_text
         
         # Add user message to history
@@ -499,7 +511,11 @@ async def process_query(request: QueryRequest):
         # Process the query
         if request.show_details:
             try:
-                result = agent.run(formatted_query, return_details=True)
+                # Pass image_paths for Cloud Architect agent
+                if request.agent_type == "cloud_architect" and image_paths:
+                    result = agent.run(formatted_query, return_details=True, image_paths=image_paths)
+                else:
+                    result = agent.run(formatted_query, return_details=True)
                 
                 # Extract detailed information
                 response_text = result.get("output", "")
@@ -573,7 +589,11 @@ async def process_query(request: QueryRequest):
             
             return response_data
         else:
-            response = agent.run(formatted_query)
+            # Pass image_paths for Cloud Architect agent
+            if request.agent_type == "cloud_architect" and image_paths:
+                response = agent.run(formatted_query, image_paths=image_paths)
+            else:
+                response = agent.run(formatted_query)
             session.add_message("assistant", response)
             
             # Clean up temp files
@@ -611,11 +631,10 @@ async def get_settings():
     """Get current settings."""
     return SettingsResponse(
         project_root=developer_agent.project_root,
-        model_name=os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp"),
+        model_name=os.getenv("VERTEX_MODEL_NAME", "gemini-2.5-flash"),
         available_models=[
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
+            "gemini-2.5-flash",
+            "gemini-2.5-pro"
         ]
     )
 
@@ -646,7 +665,7 @@ async def update_settings(settings: SettingsRequest):
         
         # Update model name if provided
         if settings.model_name:
-            valid_models = ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"]
+            valid_models = ["gemini-2.5-flash", "gemini-2.5-pro"]
             if settings.model_name not in valid_models:
                 raise HTTPException(
                     status_code=400,

@@ -15,6 +15,8 @@ import json
 import os
 import re
 from dotenv import load_dotenv
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part, Image
 
 # Load environment variables
 load_dotenv()
@@ -597,14 +599,101 @@ Question: {input}
             return_intermediate_steps=True  # Always return steps for debugging
         )
     
-    def run(self, query: str, return_details: bool = False) -> Union[str, Dict[str, Any]]:
-        """Run the agent with the given query."""
-        if return_details:
-            result = self.agent(query)
-            return result
+    def run(self, query: str, return_details: bool = False, image_paths: List[str] = None) -> Union[str, Dict[str, Any]]:
+        """Run the agent with the given query and optional images."""
+        
+        # If images are provided, use native Vertex AI multimodal API
+        if image_paths and len(image_paths) > 0:
+            result = self._run_with_images(query, image_paths)
+            if return_details:
+                return {
+                    "output": result,
+                    "intermediate_steps": []  # Image mode doesn't use agent tools
+                }
+            else:
+                return result
         else:
-            result = self.agent.run(query)
-            return result
+            # Use LangChain agent for text-only queries
+            if return_details:
+                result = self.agent(query)
+                return result
+            else:
+                result = self.agent.run(query)
+                return result
+    
+    def _run_with_images(self, query: str, image_paths: List[str]) -> str:
+        """Run the agent with images using native Vertex AI API."""
+        try:
+            # Initialize Vertex AI
+            gcp_project = os.getenv("GCP_PROJECT_ID")
+            gcp_location = os.getenv("GCP_LOCATION", "us-central1")
+            model_name = os.getenv("VERTEX_MODEL_NAME", "gemini-2.0-flash-exp")
+            
+            # Check if model supports vision
+            vision_models = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-2.5-flash"]
+            if not any(vm in model_name for vm in vision_models):
+                return f"Note: The current model ({model_name}) may not support image analysis. Please use a Gemini vision model.\n\nText query: {query}"
+            
+            vertexai.init(project=gcp_project, location=gcp_location)
+            model = GenerativeModel(model_name)
+            
+            # Prepare content with images and text
+            contents = []
+            
+            # Add images first
+            for image_path in image_paths:
+                try:
+                    image = Image.load_from_file(image_path)
+                    contents.append(Part.from_image(image))
+                except Exception as e:
+                    print(f"Error loading image {image_path}: {e}")
+            
+            # Add the query with the Developer Agent prompt context
+            prompt_context = """You are an expert AI developer assistant that analyzes images and provides code-related guidance.
+
+Analyze the provided image(s) and respond to the user's specific question.
+
+YOUR CAPABILITIES:
+- Analyze code screenshots, diagrams, and technical images
+- Understand architecture diagrams and system designs
+- Read and interpret error messages from screenshots
+- Provide code suggestions based on visual information
+- Explain technical concepts shown in images
+
+RESPONSE GUIDELINES:
+- Focus on what the user actually asks about the image(s)
+- Provide actionable code solutions when relevant
+- Explain technical details clearly
+- If code is shown in the image, analyze it and provide improvements
+- If errors are shown, diagnose and suggest fixes
+
+IMPORTANT:
+- You are in IMAGE ANALYSIS mode - you cannot directly modify files
+- Provide code snippets and detailed instructions that the user can implement
+- Be specific and practical in your recommendations
+
+"""
+            full_query = prompt_context + "\n\nUser Query: " + query
+            contents.append(Part.from_text(full_query))
+            
+            # Generate response
+            response = model.generate_content(
+                contents,
+                generation_config={
+                    "max_output_tokens": 8192,
+                    "temperature": 0.3,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                }
+            )
+            
+            return response.text
+            
+        except Exception as e:
+            error_msg = f"Error processing images: {str(e)}"
+            print(error_msg)
+            # Fallback to text-only processing
+            return f"{error_msg}\n\nProcessing query without images:\n\n{self.agent.run(query)}"
 
 # Custom output parser
 class CustomOutputParser(AgentOutputParser):

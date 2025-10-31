@@ -279,8 +279,8 @@ async def stream_agent_response(
         # NOTE: agent.run() is synchronous and blocks, but we stream results after
         if show_details:
             try:
-                # Pass image_paths for Cloud Architect agent
-                if agent_type == "cloud_architect" and image_paths:
+                # Pass image_paths for agents that support it
+                if image_paths and agent_type in ["cloud_architect", "developer"]:
                     result = agent.run(query, return_details=True, image_paths=image_paths)
                 else:
                     result = agent.run(query, return_details=True)
@@ -368,8 +368,8 @@ async def stream_agent_response(
                 await asyncio.sleep(0.1)
         else:
             try:
-                # Pass image_paths for Cloud Architect agent
-                if agent_type == "cloud_architect" and image_paths:
+                # Pass image_paths for agents that support it
+                if image_paths and agent_type in ["cloud_architect", "developer"]:
                     response = agent.run(query, image_paths=image_paths)
                 else:
                     response = agent.run(query)
@@ -511,8 +511,8 @@ async def process_query(request: QueryRequest):
         # Process the query
         if request.show_details:
             try:
-                # Pass image_paths for Cloud Architect agent
-                if request.agent_type == "cloud_architect" and image_paths:
+                # Pass image_paths for agents that support it
+                if image_paths and request.agent_type in ["cloud_architect", "developer"]:
                     result = agent.run(formatted_query, return_details=True, image_paths=image_paths)
                 else:
                     result = agent.run(formatted_query, return_details=True)
@@ -589,8 +589,8 @@ async def process_query(request: QueryRequest):
             
             return response_data
         else:
-            # Pass image_paths for Cloud Architect agent
-            if request.agent_type == "cloud_architect" and image_paths:
+            # Pass image_paths for agents that support it
+            if image_paths and request.agent_type in ["cloud_architect", "developer"]:
                 response = agent.run(formatted_query, image_paths=image_paths)
             else:
                 response = agent.run(formatted_query)
